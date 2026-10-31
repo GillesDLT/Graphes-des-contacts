@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Graphe des contacts</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header id="toolbar">
+  <div class="tb-group">
+    <span class="brand">⚙ Graphe des contacts</span>
+  </div>
+  <div class="tb-group">
+    <button data-act="new" title="Nouveau document">🗋</button>
+    <button data-act="open" title="Ouvrir (.json)">📂</button>
+    <button data-act="save" title="Enregistrer (.json) — Ctrl+S">💾</button>
+    <button data-act="png" title="Exporter en PNG — Ctrl+E">PNG</button>
+    <button data-act="svgx" title="Exporter en SVG">SVG</button>
+    <button data-act="copyimg" title="Copier l'image (à coller dans PowerPoint, Word…)">📋 Image</button>
+  </div>
+  <div class="tb-group">
+    <button data-act="undo" title="Annuler — Ctrl+Z">↶</button>
+    <button data-act="redo" title="Rétablir — Ctrl+Y">↷</button>
+    <button data-act="dup" title="Dupliquer la sélection — Ctrl+D">⧉</button>
+    <button data-act="del" title="Supprimer la sélection — Suppr">🗑</button>
+  </div>
+  <div class="tb-group tools">
+    <button data-tool="select" title="Déplacer un élément ou glisser sur le fond pour déplacer la vue — V / H">↔ Déplacer</button>
+    <button data-tool="piece" class="accent" title="Nouvelle pièce — P">◯ Nouvelle pièce</button>
+    <button data-tool="liaison" class="accent" title="Nouvelle liaison (Ctrl+clic sur 2 pièces) — L">⟷ Nouvelle liaison</button>
+    <button data-tool="rep" title="Groupe de répétition (Ctrl+clic sur les pièces répétées) — R"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="6" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="18" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.7"/></svg> Répétition</button>
+    <button data-tool="fonc" title="Groupe fonctionnel (Ctrl+clic sur les pièces) — G"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="11" fill="#111"/><circle cx="8" cy="14" r="3" fill="white"/><circle cx="16" cy="14" r="3" fill="white"/><circle cx="12" cy="7" r="3" fill="white"/></svg> Fonctionnel</button>
+    <button data-tool="ref" title="Système de référence (Ctrl+clic sur les surfaces) — T"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="2" y="2" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8"/><text x="12" y="17" text-anchor="middle" fill="currentColor" font-family="Arial, sans-serif" font-size="15" font-weight="700">A</text></svg> Référence</button>
+    <button data-tool="cfg" class="red" title="Nouvelle CF : cliquer sur 2 pièces, puis choisir ses surfaces et son nom libre — C">CF</button>
+    <button data-tool="cycle" class="orange" title="Cycle : Ctrl+clic sur une surface de CF, puis les surfaces ou références — Y">Cycle</button>
+  </div>
+  <div class="tb-group">
+    <button data-tool="pipette" title="Pipette : prendre la couleur d'un élément — I">💧</button>
+    <button data-tool="paint" title="Pot de peinture : appliquer la couleur courante — B">🪣</button>
+    <input type="color" id="curColor" value="#fdb975" title="Couleur courante">
+    <button data-act="eyedrop" title="Pipette écran (n'importe quel pixel)">🎯</button>
+  </div>
+  <div class="tb-group">
+    <button data-act="zoomout" title="Zoom arrière">−</button>
+    <span id="zoomLbl">100%</span>
+    <button data-act="zoomin" title="Zoom avant">+</button>
+    <button data-act="fit" title="Ajuster à l'écran — 0">⤢</button>
+    <button data-act="grid" title="Afficher / masquer la grille">#</button>
+    <button data-act="details" title="Afficher le détail des liaisons (axe, normale…) sur le graphe">n(<span class="vec">z</span>)</button>
+    <button data-act="nominal0" title="Afficher / cacher les nominaux n° de pièce . 0 reliés à toutes les surfaces">Nominal 0</button>
+    <button data-act="referenceimage" title="Choisir une image locale temporaire">Image de référence</button>
+    <button data-act="settings" title="Paramètres (types de surfaces / liaisons)">Paramètres</button>
+    <button data-act="help" title="Aide">?</button>
+  </div>
+</header>
+<main>
+  <div id="stage" class="grid">
+    <svg id="svg" xmlns="http://www.w3.org/2000/svg">
+      <g id="viewport" font-family="Segoe UI, Arial, sans-serif">
+        <g id="content">
+          <g id="l-groups"></g>
+          <g id="l-pieces"></g>
+          <g id="l-reffill"></g>
+          <g id="l-nominal"></g>
+          <g id="l-cycle-internal"></g>
+          <g id="l-links"></g>
+          <g id="l-cfg"></g>
+          <g id="l-surfaces"></g>
+          <g id="l-piece-labels"></g>
+          <g id="l-labels"></g>
+          <g id="l-outlines"></g>
+          <g id="l-group-labels"></g>
+          <g id="l-nominal-labels"></g>
+        </g>
+        <g id="l-overlay"></g>
+      </g>
+    </svg>
+    <div id="tip"></div>
+    <div id="pickbar"></div>
+    <div id="toast"></div>
+    <section id="referenceImage" aria-label="Image de référence flottante" hidden>
+      <header id="referenceImageHeader"><span id="referenceImageName"></span><button data-image-act="hide" title="Cacher l’image">−</button><button data-image-act="delete" title="Supprimer l’image">✕</button></header>
+      <div id="referenceImageControls"><button data-image-act="replace" title="Choisir une autre image">Remplacer</button><button data-image-act="zoomout" title="Zoom arrière sur l’image">−</button><span id="referenceImageZoom">100%</span><button data-image-act="zoomin" title="Zoom avant sur l’image">+</button><button data-image-act="fit" title="Afficher l’image entière">Ajuster</button></div>
+      <div id="referenceImageViewport"><img id="referenceImageContent" draggable="false" alt=""></div>
+      <button id="referenceImageResize" aria-label="Redimensionner l’image de référence" title="Glisser pour redimensionner ; flèches au clavier">↘</button>
+    </section>
+  </div>
+  <aside id="props"></aside>
+</main>
+<footer id="tabs"></footer>
+<div id="modal-root"></div>
+<input type="file" id="fileInput" accept=".json,application/json" hidden>
+<input type="file" id="referenceImageInput" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp,image/avif" hidden>
+<script src="core.js"></script>
+<script src="reference-layout.js"></script>
+<script src="metaball.js"></script>
+<script src="symbols.js"></script>
+<script src="cfcycle.js"></script>
+<script src="render.js"></script>
+<script src="dialogs.js"></script>
+<script src="liaison.js"></script>
+<script src="props.js"></script>
+<script src="interact.js"></script>
+<script src="reference-image.js"></script>
+</body>
+</html>

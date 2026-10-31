@@ -1,0 +1,26 @@
+# Generated archives, exports and working documents
+dist/
+exports/
+documents/
+*.zip
+*.log
+*.tmp
+
+# Local editor and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Local environment and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Optional tooling
+node_modules/
+coverage/
+_site/
