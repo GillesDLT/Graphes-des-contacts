@@ -36,7 +36,9 @@ projets ou comptes rendus.
   CF par cycle.
 - Afficher ou masquer les cycles, choisir leur couleur et gérer les CF en noir
   ou dans leur couleur.
-- Extraire chaque cycle dans une feuille dédiée, puis exporter en **PNG ou SVG**.
+- Calculer les boucles fermées associées aux CF : un parcours entre les deux pièces d’une CF, sans repasser par la même pièce.
+- Extraire chaque cycle dans une feuille dédiée, puis exporter en **PNG, SVG ou PowerPoint éditable**.
+- Ajouter des notes textuelles déplaçables et choisir un nom/emplacement au moment de l’export.
 - Afficher une image de référence flottante pendant le travail.
 - Enregistrer et rouvrir les graphes au format **JSON**.
 
@@ -152,6 +154,10 @@ Le panneau **CF** liste toutes les conditions fonctionnelles de la feuille.
 Il permet de les afficher en noir ou dans leur couleur, individuellement ou
 toutes ensemble, sans effacer leur couleur enregistrée.
 
+### Calculer les boucles fermées liées aux CF
+
+Le bouton **Boucles CF** énumère, pour chaque CF, les chemins de liaisons entre les deux pièces qu’elle relie. La CF ferme chaque boucle ; une pièce ne peut pas être visitée deux fois. Les autres CF ne servent pas de contacts dans le parcours.
+
 ### Construire un cycle
 
 1. Cliquer sur **Cycle**.
@@ -183,6 +189,7 @@ dans le panneau.
 | Annuler / rétablir | **Ctrl+Z / Ctrl+Y** |
 | Enregistrer en JSON | **Ctrl+S** |
 | Exporter en PNG | **Ctrl+E** |
+| Ajouter une note | **N**, puis clic sur le graphe |
 | Quitter l’outil actif | **Échap** |
 
 Pendant la création d’un cycle, **Ctrl+clic sur la dernière étape** ou
@@ -192,8 +199,7 @@ Pendant la création d’un cycle, **Ctrl+clic sur la dernière étape** ou
 
 ### JSON : pour continuer à modifier le graphe
 
-Le bouton **Enregistrer** télécharge un fichier `.json` contenant le document et
-ses feuilles. Pour le retrouver, regarder dans les téléchargements du navigateur.
+Le bouton **Enregistrer** propose un nom de fichier et, si le navigateur le permet, un emplacement avant de sauvegarder le `.json` contenant le document et ses feuilles. Sinon, le fichier est téléchargé dans le dossier défini par le navigateur.
 
 Pour reprendre le travail, ouvrir l’application, cliquer sur **Ouvrir**, puis
 choisir ce fichier JSON.
@@ -210,9 +216,12 @@ envoyer le fichier JSON.**
 
 - **PNG** : une image à insérer dans un rapport ou une présentation.
 - **SVG** : une image vectorielle, qui reste nette lorsqu’elle est agrandie.
+- **PowerPoint (PPTX)** : exporte les pièces, surfaces, liaisons, libellés, groupes et notes en formes/textes PowerPoint modifiables. Chaque pièce est un sous-groupe PowerPoint contenant son ellipse, son nom et ses surfaces, que l’on peut sélectionner ou déplacer ensemble. Les traits de liaison entre surfaces et leurs libellés restent des objets PowerPoint séparés et éditables. Les courbes sont converties en une suite de petits traits éditables et les contours de groupes deviennent des ellipses d’enveloppe.
 - **Image** : copier le rendu dans le presse-papier, si le navigateur l’autorise.
 
-Ces images ne remplacent pas le JSON pour reprendre les modifications.
+Pour chaque export, l’application propose un nom. Les navigateurs compatibles ouvrent un sélecteur de fichier pour choisir le dossier ; sinon, l’emplacement du téléchargement est géré par le navigateur.
+
+Les exports graphiques ne remplacent pas le JSON pour reprendre les modifications dans l’application. Le PPTX est modifiable dans PowerPoint, mais ne restitue pas toutes les données internes du graphe.
 
 ### Image de référence
 
@@ -258,6 +267,11 @@ entre utilisateurs.
 
 Ne pas publier de graphes ou de captures contenant des données confidentielles.
 L’auteur reste responsable du contenu des documents et images qu’il partage.
+
+### Notes
+
+Choisir l’outil **Note** ou appuyer sur **N**, puis cliquer à l’endroit voulu pour ajouter un commentaire. Les notes se déplacent par glisser-déposer ; double-cliquer dessus pour les modifier. Elles sont enregistrées dans le JSON et incluses dans les exports graphiques.
+
 
 ## License
 

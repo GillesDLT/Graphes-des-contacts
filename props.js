@@ -19,7 +19,7 @@ function renderProps() {
   else {
     target = obj(ids[0]);
     const k = kindOf(ids[0]);
-    html = k === 'piece' ? piecePanel(target) : k === 'surface' ? surfPanel(target) : k === 'liaison' ? linkPanel(target) : k === 'group' ? groupPanel(target) : k === 'cycle' ? cyclesPanel() : cfgPanel(target);
+    html = k === 'piece' ? piecePanel(target) : k === 'surface' ? surfPanel(target) : k === 'liaison' ? linkPanel(target) : k === 'group' ? groupPanel(target) : k === 'cycle' ? cyclesPanel() : k === 'note' ? notePanel(target) : cfgPanel(target);
   }
   box.innerHTML = html;
   if (target) $$('input[type=color][data-k]', box).forEach(i => i.value = rgbToHex(target[i.dataset.k]) || '#000000');
@@ -39,10 +39,12 @@ function emptyPanel() {
       <li>${k('Y')} : créer et afficher / cacher les cycles, ou les extraire en feuilles</li>
       <li><b>Nominal 0</b> : afficher / cacher les bulles n° de pièce . 0 reliées à toutes les surfaces</li>
     </ol>
-    <div class="btns"><button data-pa="cfs">Gérer les CF</button><button data-pa="cycles">Gérer les cycles</button></div>
+    <div class="btns"><button data-pa="cfs">Gérer les CF</button><button data-pa="cycles">Gérer les cycles</button><button data-pa="loopcalc">Calculer les boucles CF</button></div>
     <h4>Navigation</h4>
-    <div class="muted">${k('V')} / ${k('H')} Déplacer (par défaut) : glisser un élément pour le déplacer, glisser sur le fond vide pour déplacer la vue · ${k('Ctrl')}+clic : sélection multiple · ${k('Maj')}+glisser sur le fond : rectangle de sélection · Molette : zoom · Clic droit ou ${k('Espace')}+glisser : déplacer la vue même au-dessus d’un élément · ${k('0')} : tout afficher</div>`;
+    <div class="muted">${k('V')} / ${k('H')} Déplacer (par défaut) : glisser un élément pour le déplacer, glisser sur le fond vide pour déplacer la vue · ${k('Ctrl')}+clic : sélection multiple · ${k('Maj')}+glisser sur le fond : rectangle de sélection · Molette : zoom · Clic droit ou ${k('Espace')}+glisser : déplacer la vue même au-dessus d’un élément · ${k('0')} : tout afficher</div>
+    <h4>Licence</h4><div class="license-note"><b>PolyForm Noncommercial 1.0.0</b><br>Usage personnel et non commercial autorisé.<br><b>Usage commercial : autorisation écrite préalable obligatoire.</b></div>`;
 }
+function notePanel(n) { return `<h3>🗒 Note</h3><div class="row"><label>Texte</label></div><textarea data-k="text" rows="6" style="width:100%;resize:vertical">${esc(n.text)}</textarea>${fRow('Fond', fColor('color'))}<p class="muted">Glisser la note pour la déplacer ; double-clic pour la modifier.</p><div class="btns"><button data-pa="del" class="danger">🗑 Supprimer la note</button></div>`; }
 function piecePanel(p) {
   const surfs = S().surfaces.filter(s => s.pieceId === p.id);
   return `<h3><span class="chip" style="background:${p.color};color:${textOn(p.color)}">◯</span> Pièce</h3>
@@ -226,6 +228,7 @@ function propAction(a, t, btn) {
     case 'front': { checkpoint(); const gs = S().groups; gs.splice(gs.indexOf(t), 1); gs.unshift(t); changed(); break; }
     case 'back': { checkpoint(); const gs = S().groups; gs.splice(gs.indexOf(t), 1); gs.push(t); changed(); break; }
     case 'editcf': cfDialog(SF(t.a).pieceId, SF(t.b).pieceId, t.id); break;
+    case 'loopcalc': closedLoopsDialog(); break;
     case 'cycles': setTool('cycle'); break;
     case 'cfs': setTool('cfg'); break;
     case 'straight': checkpoint(); t.curved = false; t.bend = 0; changed(); break;

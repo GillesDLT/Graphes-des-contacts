@@ -15,7 +15,9 @@
     <button data-act="open" title="Ouvrir (.json)">📂</button>
     <button data-act="save" title="Enregistrer (.json) — Ctrl+S">💾</button>
     <button data-act="png" title="Exporter en PNG — Ctrl+E">PNG</button>
-    <button data-act="svgx" title="Exporter en SVG">SVG</button>
+    <button data-act="svgx" title="Exporter en SVG vectoriel">SVG</button>
+    <button data-act="pptx" title="Exporter vers PowerPoint avec des bulles modifiables">PPTX</button>
+    <button data-act="cyclo" title="Calculer les boucles fermées reliées aux CF sans repasser par une pièce">Boucles CF</button>
     <button data-act="copyimg" title="Copier l'image (à coller dans PowerPoint, Word…)">📋 Image</button>
   </div>
   <div class="tb-group">
@@ -33,6 +35,7 @@
     <button data-tool="ref" title="Système de référence (Ctrl+clic sur les surfaces) — T"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="2" y="2" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8"/><text x="12" y="17" text-anchor="middle" fill="currentColor" font-family="Arial, sans-serif" font-size="15" font-weight="700">A</text></svg> Référence</button>
     <button data-tool="cfg" class="red" title="Nouvelle CF : cliquer sur 2 pièces, puis choisir ses surfaces et son nom libre — C">CF</button>
     <button data-tool="cycle" class="orange" title="Cycle : Ctrl+clic sur une surface de CF, puis les surfaces ou références — Y">Cycle</button>
+    <button data-tool="note" title="Ajouter une note sur le graphe — N">🗒 Note</button>
   </div>
   <div class="tb-group">
     <button data-tool="pipette" title="Pipette : prendre la couleur d'un élément — I">💧</button>
@@ -70,6 +73,7 @@
           <g id="l-labels"></g>
           <g id="l-outlines"></g>
           <g id="l-group-labels"></g>
+          <g id="l-notes"></g>
           <g id="l-nominal-labels"></g>
         </g>
         <g id="l-overlay"></g>
@@ -98,6 +102,7 @@
 <script src="cfcycle.js"></script>
 <script src="render.js"></script>
 <script src="dialogs.js"></script>
+<script src="pptx.js"></script>
 <script src="liaison.js"></script>
 <script src="props.js"></script>
 <script src="interact.js"></script>

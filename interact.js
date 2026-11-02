@@ -64,7 +64,7 @@ function pasteClip() {
 }
 function duplicateSel() { if (!sel.size) return; const c = clip, n = pasteN; clip = collect([...sel]); pasteN = 0; pasteClip(); clip = c; pasteN = n; }
 function invertSel() { const all = S().pieces.map(p => p.id); const cur = new Set(sel); sel.clear(); all.forEach(id => { if (!cur.has(id)) sel.add(id); }); changed(); }
-function selectAll() { sel.clear(); S().pieces.forEach(p => sel.add(p.id)); S().groups.forEach(g => sel.add(g.id)); S().cfgs.forEach(c => sel.add(c.id)); changed(); }
+function selectAll() { sel.clear(); S().pieces.forEach(p => sel.add(p.id)); S().groups.forEach(g => sel.add(g.id)); S().cfgs.forEach(c => sel.add(c.id)); (S().notes || []).forEach(n => sel.add(n.id)); changed(); }
 function extractToSheet() {
   if (!sel.size) return;
   const data = collect([...sel]); checkpoint();
@@ -157,6 +157,7 @@ svg.addEventListener('pointerdown', e => {
   }
   if (tool === 'paint') { const o = h && obj(h.id); if (o) { checkpoint(); if (kindOf(o.id) === 'cfg') setCFColor(o, $('#curColor').value); else o.color = $('#curColor').value; changed(); } return; }
   if (tool === 'piece') { if (!h || h.kind === 'group') pieceDialog(pt); else { sel.clear(); sel.add(h.id); changed(); } return; }
+  if (tool === 'note') { noteDialog(pt); return; }
   if (tool === 'liaison') {
     const pid = pieceOfHit(h);
     if (!pid && h && h.kind === 'group' && G(h.id)?.collapsed) return toast('Développez le groupe (bouton +) pour créer une liaison avec une de ses pièces');
@@ -213,7 +214,7 @@ svg.addEventListener('pointerdown', e => {
     if (e.ctrlKey || e.shiftKey || e.metaKey) { if (sel.has(id)) sel.delete(id); else sel.add(id); }
     else if (!sel.has(id)) { sel.clear(); sel.add(id); }
     renderProps(); render();
-    if (['piece', 'surface', 'group'].includes(h.kind) && sel.has(id)) startMove(pt);
+    if (['piece', 'surface', 'group', 'note'].includes(h.kind) && sel.has(id)) startMove(pt);
     return;
   }
   if (!(e.ctrlKey || e.shiftKey)) sel.clear();
@@ -232,7 +233,8 @@ function startMove(pt) {
   drag = {
     type: 'move', start: pt, snap: snapshot(), moved: false,
     pieces: [...mp].map(P).filter(Boolean).map(p => [p, p.x, p.y]),
-    surfs: surfs.map(x => [x, x.dx, x.dy])
+    surfs: surfs.map(x => [x, x.dx, x.dy]),
+    notes: [...sel].map(id => (S().notes || []).find(n => n.id === id)).filter(Boolean).map(n => [n, n.x, n.y])
   };
 }
 
@@ -259,6 +261,7 @@ svg.addEventListener('pointermove', e => {
     if (!drag.moved) { checkpoint(drag.snap); drag.moved = true; lastDown.t = 0; }
     drag.pieces.forEach(([p, x, y]) => { p.x = x + dx; p.y = y + dy; });
     drag.surfs.forEach(([s, x, y]) => { const p = P(s.pieceId); s.pinned = true; s.ang = angleOnPiece(p, p.x + x + dx, p.y + y + dy); });
+    drag.notes.forEach(([n, x, y]) => { n.x = x + dx; n.y = y + dy; });
     render(); return;
   }
   if (drag.type === 'resize') {
@@ -322,6 +325,7 @@ svg.addEventListener('pointercancel', () => {
 
 function onDouble(h, pt, e) {
   render();
+  if (h && h.kind === 'note') return noteDialog(null, h.id);
   if (h && h.kind === 'nominal') { checkpoint(); delete P(h.id).nominal; changed(); return; }
   if (h && h.kind === 'glabel') { const g = G(h.id); checkpoint(); g.lab = null; changed(); return; }
   if (h && h.kind === 'group' && G(h.id).kind === 'fonc') return toggleCollapse(G(h.id));
@@ -338,7 +342,7 @@ svg.addEventListener('wheel', e => {
 }, { passive: false });
 
 /* ===== Clavier ===== */
-const TOOL_KEYS = { h: 'select', v: 'select', p: 'piece', l: 'liaison', r: 'rep', g: 'fonc', t: 'ref', c: 'cfg', y: 'cycle', i: 'pipette', b: 'paint' };
+const TOOL_KEYS = { h: 'select', v: 'select', p: 'piece', l: 'liaison', r: 'rep', g: 'fonc', t: 'ref', c: 'cfg', y: 'cycle', n: 'note', i: 'pipette', b: 'paint' };
 document.addEventListener('keydown', e => {
   if (modalOpen) return;
   const tag = (e.target.tagName || '').toLowerCase();
@@ -401,6 +405,8 @@ async function toolbarAction(a) {
     case 'save': saveJSON(); break;
     case 'png': exportPNG(); break;
     case 'svgx': exportSVG(); break;
+    case 'pptx': exportPPTX(); break;
+    case 'cyclo': closedLoopsDialog(); break;
     case 'copyimg': copyImage(); break;
     case 'undo': undo(); break;
     case 'redo': redo(); break;
@@ -449,18 +455,25 @@ $('#tabs').addEventListener('dblclick', e => {
 /* ===== Export ===== */
 function download(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); }
 const fileBase = () => S().name.replace(/[^\w\-À-ÿ ]+/g, '_').trim() || 'graphe';
-function saveJSON() { download(new Blob([JSON.stringify(doc, null, 1)], { type: 'application/json' }), fileBase() + '.json'); toast('Enregistré'); }
+function saveJSON() { exportFileDialog({ title: 'Enregistrer le graphe JSON', extension: '.json', mime: 'application/json', makeBlob: () => new Blob([JSON.stringify(doc, null, 1)], { type: 'application/json' }) }); }
 function buildExportSVG() {
-  if (!S().pieces.length) { toast('Graphe vide'); return null; }
+  if (!S().pieces.length && !(S().notes || []).length) { toast('Graphe vide'); return null; }
   const box = $('#content').getBBox(), bb = { x0: box.x, y0: box.y, x1: box.x + box.width, y1: box.y + box.height };
   const m = 40, x = bb.x0 - m, y = bb.y0 - m, w = bb.x1 - bb.x0 + 2 * m, h = bb.y1 - bb.y0 + 2 * m;
-  const inner = $('#content').innerHTML
-    .replace(/<g [^>]*data-kind="gtoggle"[^>]*>[\s\S]*?<\/g>/g, '')
-    .replace(/<title>[\s\S]*?<\/title>/g, '')
-    .replace(/ data-(id|kind)="[^"]*"/g, '');
-  return { w, h, str: `<svg xmlns="http://www.w3.org/2000/svg" width="${r1(w)}" height="${r1(h)}" viewBox="${r1(x)} ${r1(y)} ${r1(w)} ${r1(h)}" font-family="Segoe UI, Arial, sans-serif"><rect x="${r1(x)}" y="${r1(y)}" width="${r1(w)}" height="${r1(h)}" fill="#ffffff"/>${inner}</svg>` };
+  // Sérialiser le DOM SVG plutôt que de recopier innerHTML : les <text>/<tspan>
+  // restent de vrais nœuds SVG dans le fichier exporté (notamment dans PowerPoint).
+  const exported = $('#content').cloneNode(true);
+  exported.removeAttribute('id');
+  exported.querySelectorAll('[data-kind="gtoggle"], title').forEach(n => n.remove());
+  exported.querySelectorAll('[data-id], [data-kind]').forEach(n => { n.removeAttribute('data-id'); n.removeAttribute('data-kind'); });
+  exported.querySelectorAll('text').forEach(t => {
+    t.setAttribute('font-family', 'Arial, Liberation Sans, sans-serif');
+    t.setAttributeNS('http://www.w3.org/XML/1998/namespace', 'xml:space', 'preserve');
+  });
+  const inner = new XMLSerializer().serializeToString(exported);
+  return { w, h, str: `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${r1(w)}" height="${r1(h)}" viewBox="${r1(x)} ${r1(y)} ${r1(w)} ${r1(h)}" font-family="Arial, Liberation Sans, sans-serif" shape-rendering="geometricPrecision" text-rendering="geometricPrecision"><title>${esc(S().name)} — Graphe des contacts</title><desc>Graphe vectoriel comprenant pièces, surfaces, liaisons, groupes et notes.</desc><rect x="${r1(x)}" y="${r1(y)}" width="${r1(w)}" height="${r1(h)}" fill="#ffffff"/>${inner}</svg>` };
 }
-function exportSVG() { const s = buildExportSVG(); if (s) download(new Blob([s.str], { type: 'image/svg+xml' }), fileBase() + '.svg'); }
+function exportSVG() { exportFileDialog({ title: 'Exporter en SVG vectoriel', extension: '.svg', mime: 'image/svg+xml', makeBlob: () => { const s = buildExportSVG(); return s ? new Blob([s.str], { type: 'image/svg+xml;charset=utf-8' }) : null; } }); }
 function renderPNG(scale = 3) {
   const s = buildExportSVG(); if (!s) return Promise.resolve(null);
   return new Promise(res => {
@@ -473,7 +486,8 @@ function renderPNG(scale = 3) {
     img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(s.str);
   });
 }
-async function exportPNG() { const b = await renderPNG(); if (b) download(b, fileBase() + '.png'); }
+function exportPNG() { exportFileDialog({ title: 'Exporter en PNG', extension: '.png', mime: 'image/png', makeBlob: renderPNG }); }
+function exportPPTX() { exportFileDialog({ title: 'Exporter en PowerPoint (formes modifiables)', extension: '.pptx', mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', makeBlob: makePptxBlob }); }
 async function copyImage() {
   try { const b = await renderPNG(); if (!b) return; await navigator.clipboard.write([new ClipboardItem({ 'image/png': b })]); toast('Image copiée dans le presse-papier'); }
   catch (e) { toast('Copie impossible : utilisez Export PNG'); }

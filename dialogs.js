@@ -33,6 +33,91 @@ function askText(title, value, onOk) {
 }
 function askConfirm(title, msg, onOk) { openModal({ title, body: `<p>${msg}</p>`, okText: 'Confirmer', onOk }); }
 
+/* Export : nom proposé et choix natif de l’emplacement quand le navigateur le permet. */
+function exportFileDialog({ title, extension, mime, makeBlob }) {
+  const suggested = (fileBase() || 'graphe') + extension;
+  const body = el(`<div><label for="exportName">Nom du fichier</label><input id="exportName" type="text" style="width:100%;margin-top:6px" value="${esc(suggested)}" autofocus><p class="muted">Le navigateur proposera un emplacement d’enregistrement. Si le sélecteur de fichier n’est pas disponible, le fichier sera téléchargé dans le dossier défini par le navigateur.</p></div>`);
+  openModal({
+    title, body, okText: 'Choisir l’emplacement et exporter',
+    onOk: () => {
+      let name = $('#exportName', body).value.trim() || suggested;
+      if (!name.toLowerCase().endsWith(extension)) name += extension;
+      closeModal();
+      void saveExportFile({ name, extension, mime, makeBlob });
+      return false;
+    }
+  });
+}
+async function saveExportFile({ name, extension, mime, makeBlob }) {
+  try {
+    if (window.showSaveFilePicker) {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: name,
+        types: [{ description: extension.slice(1).toUpperCase(), accept: { [mime]: [extension] } }]
+      });
+      const blob = await makeBlob();
+      if (!blob) return;
+      const writable = await handle.createWritable();
+      await writable.write(blob); await writable.close();
+      toast('Fichier enregistré : ' + name);
+    } else {
+      const blob = await makeBlob(); if (blob) { download(blob, name); toast('Téléchargement lancé : ' + name); }
+    }
+  } catch (error) {
+    if (error?.name !== 'AbortError') toast('Export impossible : ' + (error?.message || error));
+  }
+}
+/* Boucles fermées associées aux CF : la CF ferme un chemin de contacts simples. */
+function closedLoopsDialog() {
+  const sheet = S(), MAX_LOOPS = 2000, MAX_VISITS = 200000, MAX_DISPLAY = 80;
+  const adjacency = new Map(sheet.pieces.map(p => [p.id, []]));
+  for (const link of sheet.liaisons) {
+    const a = SF(link.a), b = SF(link.b);
+    if (!a || !b || a.pieceId === b.pieceId || !adjacency.has(a.pieceId) || !adjacency.has(b.pieceId)) continue;
+    adjacency.get(a.pieceId).push({ pieceId: b.pieceId, link });
+    adjacency.get(b.pieceId).push({ pieceId: a.pieceId, link });
+  }
+  let total = 0, truncatedAny = false;
+  const cards = sheet.cfgs.map(cf => {
+    const sa = SF(cf.a), sb = SF(cf.b), start = sa && sa.pieceId, target = sb && sb.pieceId;
+    if (!start || !target || start === target || !adjacency.has(start) || !adjacency.has(target)) {
+      return `<section class="loop-card"><b>${esc(cfDisplayName(cf))}</b><p class="muted">CF sans deux pièces distinctes valides : impossible de fermer une boucle.</p></section>`;
+    }
+    let count = 0, visits = 0, truncated = false;
+    const found = [], pieces = [start], edges = [], visited = new Set([start]);
+    const walk = current => {
+      if (truncated) return;
+      if (++visits > MAX_VISITS || count >= MAX_LOOPS) { truncated = true; return; }
+      if (current === target) {
+        count++;
+        if (found.length < MAX_DISPLAY) found.push({ pieces: pieces.slice(), edges: edges.slice() });
+        return;
+      }
+      for (const next of adjacency.get(current) || []) {
+        if (visited.has(next.pieceId)) continue;
+        visited.add(next.pieceId); pieces.push(next.pieceId); edges.push(next.link);
+        walk(next.pieceId);
+        edges.pop(); pieces.pop(); visited.delete(next.pieceId);
+        if (truncated) return;
+      }
+    };
+    walk(start); total += count; truncatedAny ||= truncated;
+    const format = loop => {
+      let out = esc(P(loop.pieces[0])?.name || '?');
+      loop.edges.forEach((link, i) => { const a = SF(link.a), b = SF(link.b); out += ` — ${esc(liaisonLabel(link))} [${esc(a ? sname(a) : '?')} ↔ ${esc(b ? sname(b) : '?')}] → ${esc(P(loop.pieces[i + 1])?.name || '?')}`; });
+      out += ` — ${esc(cfDisplayName(cf))} → ${esc(P(start)?.name || '?')}`;
+      return out;
+    };
+    const countLabel = truncated ? `≥ ${count} (recherche limitée)` : String(count);
+    return `<section class="loop-card"><h4>${esc(cfDisplayName(cf))} : ${countLabel} boucle(s)</h4>` +
+      (found.length ? `<ol>${found.map(loop => `<li>${format(loop)}</li>`).join('')}</ol>` : '<p class="muted">Aucune boucle simple ne relie les deux pièces de cette CF.</p>') +
+      (count > found.length ? `<p class="muted">Affichage limité aux ${found.length} premières boucles.</p>` : '') + '</section>';
+  });
+  const formula = '<p><b>Boucle fermée = chemin de liaisons entre les deux pièces de la CF + la CF qui referme le parcours.</b></p><p class="muted">Une même pièce ne peut apparaître qu’une seule fois dans le chemin. Les autres CF ne sont pas utilisées comme liaisons de parcours.</p>';
+  const summary = sheet.cfgs.length ? `<p><b>${total}${truncatedAny ? ' ou plus' : ''} boucle(s) trouvée(s)</b> dans ${sheet.cfgs.length} CF de « ${esc(sheet.name)} ».</p>` : '<p>Aucune CF dans cette feuille : une boucle doit être fermée par une CF.</p>';
+  openModal({ title: 'Boucles fermées liées aux CF', wide: 760, body: `${formula}${summary}${cards.join('')}`, noCancel: true });
+}
+
 /* Pipette écran (API EyeDropper : Edge / Chrome) */
 async function eyeDrop() {
   if (!window.EyeDropper) { toast('Pipette écran non supportée par ce navigateur (utilisez Edge/Chrome)'); return null; }
@@ -50,6 +135,22 @@ function colorPicker(value, onChange) {
   bEye.onclick = async () => { const c = await eyeDrop(); if (c) set(c); };
   bCur.onclick = () => set($('#curColor').value);
   return w;
+}
+
+/* ===== Note libre sur le graphe ===== */
+function noteDialog(at, id = null) {
+  const note = id ? (S().notes || []).find(n => n.id === id) : null;
+  if (id && !note) return;
+  const body = el(`<div><label for="noteText">Commentaire</label><textarea id="noteText" autofocus rows="5" style="width:100%;resize:vertical" placeholder="Écrire une note…">${esc(note?.text || '')}</textarea><p class="muted">Les retours à la ligne sont conservés. La note reste déplaçable sur le graphe.</p></div>`);
+  openModal({ title: note ? 'Modifier la note' : 'Ajouter une note', body, okText: note ? 'Enregistrer' : 'Ajouter', onOk: () => {
+    const text = $('#noteText', body).value.trim();
+    if (!text) { $('#noteText', body).focus(); toast('La note ne peut pas être vide.'); return false; }
+    checkpoint();
+    let target = note;
+    if (!target) { target = { id: uid(), x: at.x, y: at.y, text, color: '#fff4c2' }; S().notes.push(target); }
+    else target.text = text;
+    sel.clear(); sel.add(target.id); setTool('select'); changed();
+  }});
 }
 
 /* ===== Nouvelle pièce ===== */
@@ -160,9 +261,11 @@ function helpDialog() {
       <li>Les pièces déjà sélectionnées sont reprises quand on lance l'outil. Les zones suivent automatiquement les pièces quand on les déplace. « Modifier les membres » dans le panneau d'un groupe pour ajouter/retirer des éléments.</li>
       <li><b>Noms de groupes</b> : glisser le nom d'une répétition, d'un groupe fonctionnel ou d'une référence pour le déplacer. Le metaball s'étend pour l'inclure et le nom suit les membres. Double-clic ou « Position automatique du nom » pour réinitialiser. Dans un groupe fonctionnel réduit, le nom reste à l'intérieur de l'ellipse.</li>
       <li><b>Titres de répétition dans un groupe fonctionnel</b> : avec l'outil Fonctionnel ou « Modifier les membres », choisir les pièces, puis cliquer sur un titre de répétition visible pour l'inclure / le retirer. Le contour s'étend autour du titre, sans ajouter automatiquement les pièces de la répétition aux membres. Le choix est facultatif et conservé dans le JSON. Si la répétition est masquée dans un groupe réduit, son titre n'est pas dessiné.</li>
+      <li>${k('N')} <b>Note</b> : choisir l’outil puis cliquer sur le graphe pour ajouter un commentaire. Les notes se déplacent avec Déplacer, se modifient par double-clic et sont conservées dans le JSON.</li>
       <li><b>Nominal 0</b> : affiche / cache les bulles <i>n°pièce.0</i> reliées aux surfaces (contacts et CF). Glisser une bulle pour la déplacer à l'intérieur de sa pièce ; elle suit ensuite la pièce. Double-clic sur la bulle, ou bouton de réinitialisation dans le panneau de la pièce, pour revenir à la position initiale. La position reste conservée après enregistrement et copie. Les pièces masquées n'affichent pas de nominal.</li>
       <li>${k('C')} <b>CF</b> : clic sur deux pièces différentes → choisir un nom libre (texte, nombre ou vide) et les types des deux nouvelles surfaces. Le nom doit être unique dans la feuille, sans distinction de casse ou d'espaces extérieurs ; une seule CF sans nom est autorisée. Les anciens noms CF1, CF2… sont conservés à l'ouverture. Les surfaces sont propres à la CF ; supprimer la CF ou une de ses surfaces supprime les deux. L'option <b>Encadrer le libellé sur le trait</b> est disponible à la création et dans le panneau de la CF ; un nom vide n'affiche aucun texte ni cadre.</li>
       <li>Le panneau <b>CF</b> liste toutes les CF de la feuille : leur couleur est réglable et l'affichage peut être basculé individuellement ou toutes ensemble en <b>noir</b> ou dans leur <b>couleur enregistrée</b>. Le mode noir colore le lien, son libellé / cadre et ses surfaces propres, sans effacer les couleurs mémorisées. « Propriétés » ouvre les réglages détaillés.</li>
+      <li><b>Boucles CF</b> : énumère les chemins de liaisons fermés par chacune des CF. Une boucle part d’une pièce de la CF, passe par des contacts et revient à l’autre pièce de la même CF ; aucune pièce ne peut être répétée.</li>
       <li>${k('Y')} <b>Cycle</b> : partir d'une surface de CF, puis <b>clic ou Ctrl+clic</b> sur les surfaces ou références et terminer sur l'autre surface de <b>la même CF</b>. Une autre CF est refusée. <b>Ctrl+clic sur la dernière étape</b> ou ${k('Retour arrière')} la retire ; ${k('Échap')} annule. Surfaces, contacts, contours de références et courbes internes utilisent la <b>couleur du cycle</b> (orange par défaut), avec des pointillés passant près du centre des pièces. La CF garde son trait continu dans son propre mode noir / couleur, indépendamment du cycle. Aucun libellé « cycle N » n'est ajouté au graphe.</li>
       <li>Une référence est entourée en entier au lieu de surligner séparément ses surfaces. Tous ses contacts vers la pièce suivante sont inclus, même si une seule surface est cliquée. Ces surfaces et contacts sont également inclus dans la feuille exportée.</li>
       <li>Le panneau <b>Cycles</b> liste tous les cycles : numéro et couleur modifiables, visibilité individuelle, tout afficher dans leurs couleurs ou tout cacher, suppression. Changer la couleur d'un cycle masqué ne l'affiche pas. Sur un élément partagé, le <b>dernier cycle affiché</b> est prioritaire (priorité 1 dans le panneau) ; « Afficher en couleur » permet de le remettre au premier plan. Couleurs, visibilité et priorités sont conservées à l'enregistrement et dans les exports. La suppression d'un élément du parcours supprime aussi les cycles invalidés (notification).</li>
@@ -180,5 +283,5 @@ function helpDialog() {
       <li>Molette = zoom · clic droit / clic molette / ${k('Espace')}+glisser = se déplacer · ${k('0')} ajuster.</li>
       <li><b>Image de référence</b> : choisir une image locale (PNG, JPEG, WebP, GIF, BMP ou AVIF). La fenêtre apparaît en haut à droite du tableau : glisser son titre pour la déplacer et son coin inférieur droit pour la redimensionner. Molette ou + / − pour zoomer dans l'image ; glisser l'image pour la parcourir ; « Ajuster » pour la voir entière. Le bouton − du titre la cache, « Image de référence » la réaffiche, ✕ la supprime et « Remplacer » change l'image. Elle est <b>temporaire</b>, commune aux feuilles, non enregistrée dans le JSON et absente des exports PNG / SVG ; recharger la page la supprime.</li>
       <li>Feuilles en bas : ⧉ <b>Dupliquer la feuille</b> pour étudier une fermeture géométrique sans toucher au graphe d'origine. « Extraire vers une feuille » copie une zone sélectionnée.</li>
-      <li>Export PNG / SVG / copie d'image dans le presse-papier. Enregistrement automatique dans le navigateur + fichier .json.</li></ul>` });
+      <li>Export PNG / SVG / PowerPoint modifiable / copie d’image. Les exports proposent un nom et l’emplacement si le navigateur le permet. Le SVG conserve les libellés en texte ; le PPTX contient des formes et textes éditables, avec un groupe PowerPoint par pièce (bulle, nom et surfaces). Les courbes sont approximées par des segments.</li><li>Enregistrement automatique dans le navigateur + fichier .json.</li></ul>` });
 }

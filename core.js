@@ -64,7 +64,7 @@ const SYMBOLS = ['EN', 'PV', 'GL', 'PG', 'HE', 'ROT', 'RD', 'AP', 'LA', 'LR', 'P
 const FIELD_LABELS = { point: 'Point / centre', axe: 'Axe / direction', normale: 'Normale', pas: 'Pas' };
 
 /* ===== Document ===== */
-function newSheet(name) { return { id: uid(), name, pieces: [], surfaces: [], liaisons: [], groups: [], cfgs: [], cycles: [], view: { x: 0, y: 0, k: 1 } }; }
+function newSheet(name) { return { id: uid(), name, pieces: [], surfaces: [], liaisons: [], groups: [], cfgs: [], cycles: [], notes: [], view: { x: 0, y: 0, k: 1 } }; }
 function newDoc() { const s = newSheet('Graphe 1'); return { version: 2, sheets: [s], active: s.id, settings: clone(DEFAULT_SETTINGS) }; }
 let doc = newDoc();
 
@@ -84,9 +84,10 @@ function kindOf(id) {
   if (s.groups.some(o => o.id === id)) return 'group';
   if (s.cfgs.some(o => o.id === id)) return 'cfg';
   if (s.cycles.some(o => o.id === id)) return 'cycle';
+  if ((s.notes || []).some(o => o.id === id)) return 'note';
   return null;
 }
-const obj = id => P(id) || SF(id) || L(id) || G(id) || C(id) || CY(id);
+const obj = id => P(id) || SF(id) || L(id) || G(id) || C(id) || CY(id) || (S().notes || []).find(o => o.id === id);
 
 function ltype(code) {
   return doc.settings.liaisonTypes.find(t => t.code === code) || { code, label: code, fields: [], symbol: 'GEN', sA: 'PL', sB: 'PL' };
@@ -127,7 +128,7 @@ function loadDoc(o) {
   if (oldCame && !o.settings.surfaceTypes.some(t => t.code === 'SC')) o.settings.surfaceTypes.push({ code: 'SC', label: 'Surface complexe' });
   o.settings.liaisonTypes.forEach(t => { if (t.sA === 'CA') t.sA = 'SC'; if (t.sB === 'CA') t.sB = 'SC'; });
   o.sheets.forEach(s => {
-    ['pieces', 'surfaces', 'liaisons', 'groups', 'cfgs', 'cycles'].forEach(k => {
+    ['pieces', 'surfaces', 'liaisons', 'groups', 'cfgs', 'cycles', 'notes'].forEach(k => {
       if (s[k] == null) s[k] = [];
       if (!Array.isArray(s[k])) throw new Error('Liste invalide : ' + k);
     }); s.view = s.view || { x: 0, y: 0, k: 1 };
@@ -426,6 +427,7 @@ function contentBBox(sheet = S()) {
   const pts = [];
   sheet.pieces.forEach(p => { pts.push([p.x - p.rx, p.y - p.ry], [p.x + p.rx, p.y + p.ry]); });
   sheet.groups.forEach(g => groupPoints(g).forEach(p => pts.push(p)));
+  (sheet.notes || []).forEach(n => { const lines = noteLines(n); const w = Math.max(90, Math.min(340, Math.max(...lines.map(line => textW(line, '14px "Segoe UI", Arial, sans-serif') + 20)))); const h = lines.length * 19 + 20; pts.push([n.x, n.y], [n.x + w, n.y + h]); });
   sheet.surfaces.filter(surfVisible).forEach(s => { const p = spos(s); pts.push([p.x - s.r, p.y - s.r], [p.x + s.r, p.y + s.r]); });
   if (!pts.length) return null;
   return bboxPts(pts);
@@ -482,6 +484,7 @@ function deleteIds(ids) {
   s.cfgs = s.cfgs.filter(x => !del.has(x.id));
   s.groups = s.groups.filter(x => !del.has(x.id));
   s.cycles = s.cycles.filter(x => !del.has(x.id));
+  s.notes = (s.notes || []).filter(x => !del.has(x.id));
   cleanupOrphans(s);
 }
 function cleanupOrphans(s = S()) {
@@ -513,7 +516,7 @@ function cleanupOrphans(s = S()) {
 
 /* ===== Copier / coller / dupliquer ===== */
 function collect(ids) {
-  const s = S(); const pids = new Set(), groupIds = new Set(ids.filter(G));
+  const s = S(); const pids = new Set(), groupIds = new Set(ids.filter(id => G(id))), noteIds = new Set(ids.filter(id => kindOf(id) === 'note'));
   for (const id of ids) {
     const k = kindOf(id);
     if (k === 'piece') pids.add(id);
@@ -540,7 +543,8 @@ function collect(ids) {
     const contents = cycleContents(c, s);
     return included.has(c.cfId) && [...contents.surfaces, ...contents.references, ...contents.links].every(id => included.has(id));
   });
-  return clone({ pieces, surfaces, liaisons, groups, cfgs, cycles, cycleSnapshot: !!s.cycleSnapshot, from: s.id });
+  const notes = (s.notes || []).filter(n => noteIds.has(n.id));
+  return clone({ pieces, surfaces, liaisons, groups, cfgs, cycles, notes, cycleSnapshot: !!s.cycleSnapshot, from: s.id });
 }
 function pasteData(data, offset) {
   const s = S(); const map = new Map(); const nid = id => { if (!map.has(id)) map.set(id, uid()); return map.get(id); };
@@ -567,6 +571,7 @@ function pasteData(data, offset) {
     if (s.cfgs.some(x => x.num === c.num)) c.num = nextCFNum();
     s.cfgs.push(c);
   }
+  for (const n of d.notes || []) { n.id = nid(n.id); n.x += offset; n.y += offset; s.notes.push(n); }
   for (const c of d.cycles || []) {
     c.id = nid(c.id); c.cfId = nid(c.cfId); c.nodes = c.nodes.map(nid);
     c.edges.forEach(e => { e.from = nid(e.from); e.to = nid(e.to); e.sa = nid(e.sa); e.sb = nid(e.sb); if (e.linkId) e.linkId = nid(e.linkId); });
@@ -575,5 +580,5 @@ function pasteData(data, offset) {
     s.cycles.push(c);
   }
   cleanupOrphans(s);
-  return [...d.pieces.map(p => p.id), ...d.groups.map(g => g.id), ...d.cfgs.map(c => c.id)];
+  return [...d.pieces.map(p => p.id), ...d.groups.map(g => g.id), ...d.cfgs.map(c => c.id), ...(d.notes || []).map(n => n.id)];
 }

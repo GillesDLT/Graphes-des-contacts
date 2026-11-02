@@ -223,6 +223,28 @@ function cycleInternalSVG(cycles) {
   }).join('');
 }
 
+function noteLines(note) {
+  const maxW = 320, fs = 14, lines = [];
+  for (const raw of String(note.text || '').split('\n')) {
+    const words = raw.split(/\s+/); let line = '';
+    for (const word of words) {
+      const candidate = line ? line + ' ' + word : word;
+      if (line && textW(candidate, `${fs}px "Segoe UI", Arial, sans-serif`) > maxW) { lines.push(line); line = word; }
+      else line = candidate;
+    }
+    lines.push(line);
+  }
+  return lines.length ? lines : [''];
+}
+function noteSVG(note) {
+  const lines = noteLines(note), fs = 14, pad = 10, lineH = 19;
+  const width = Math.max(90, Math.min(340, Math.max(...lines.map(line => textW(line, `${fs}px "Segoe UI", Arial, sans-serif`) + pad * 2))));
+  const height = lines.length * lineH + pad * 2;
+  const text = lines.map((line, i) => `<text x="${r1(pad)}" y="${r1(pad + fs + i * lineH)}" font-size="${fs}" fill="#332d1d">${esc(line)}</text>`).join('');
+  return `<g data-id="${note.id}" data-kind="note" style="cursor:move"><title>Note — double-clic pour modifier</title><rect x="${r1(note.x)}" y="${r1(note.y)}" width="${r1(width)}" height="${r1(height)}" rx="5" fill="${note.color || '#fff4c2'}" stroke="#b59b47" stroke-width="1.4"/>` +
+    `<g transform="translate(${r1(note.x)},${r1(note.y)})">${text}</g></g>`;
+}
+
 function renderView() {
   const v = S().view;
   vp.setAttribute('transform', `translate(${r1(v.x)},${r1(v.y)}) scale(${v.k})`);
@@ -253,6 +275,7 @@ function render() {
   $('#l-labels').innerHTML = vis.map(linkLabelSVG).join('');
   $('#l-outlines').innerHTML = s.groups.slice().reverse().map(groupOutlineSVG).join('');
   $('#l-group-labels').innerHTML = s.groups.slice().reverse().map(groupLabelSVG).join('');
+  $('#l-notes').innerHTML = (s.notes || []).map(noteSVG).join('');
   renderOverlay();
   $$('[data-tool]').forEach(b => b.classList.toggle('active', b.dataset.tool === tool));
   $('[data-act=details]').classList.toggle('active', !!doc.settings.showDetails);
@@ -360,7 +383,8 @@ const TIPS = {
   cfg: '<b>Clic</b> sur 2 pièces pour créer une CF avec deux nouvelles surfaces et un nom libre unique',
   cycle: '<b>Clic ou Ctrl+clic</b> sur une surface de CF, puis les surfaces ou références — finir sur l’autre surface de la même CF. <b>Ctrl+clic sur la dernière étape</b> : retirer',
   pipette: '<b>Clic</b> sur un élément pour prélever sa couleur',
-  paint: '<b>Clic</b> sur un élément pour lui appliquer la couleur courante'
+  paint: '<b>Clic</b> sur un élément pour lui appliquer la couleur courante',
+  note: '<b>Clic</b> sur le graphe pour ajouter une note. Elle se déplace ensuite avec l’outil Déplacer — <b>N</b>'
 };
 function showTip(html) { const t = $('#tip'); t.innerHTML = html || ''; t.classList.toggle('show', !!html); }
 function updateTip() {
