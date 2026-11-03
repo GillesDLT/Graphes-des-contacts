@@ -73,6 +73,64 @@ function extractToSheet() {
   sel.clear(); pasteData(data, 0); changed(); toast('Zone extraite dans une nouvelle feuille');
 }
 
+/* Crée une référence par pièce et pièce partenaire, si au moins deux surfaces
+   distinctes de la première pièce sont reliées à cette même partenaire. */
+function autoCreateReferences() {
+  const sheet = S(), byId = new Map(sheet.surfaces.map(surface => [surface.id, surface]));
+  const byPair = new Map();
+  for (const link of connections(sheet)) {
+    const a = byId.get(link.a), b = byId.get(link.b);
+    if (!a || !b || a.pieceId === b.pieceId) continue;
+    for (const [surface, other] of [[a, b], [b, a]]) {
+      const key = JSON.stringify([surface.pieceId, other.pieceId]);
+      if (!byPair.has(key)) byPair.set(key, new Set());
+      byPair.get(key).add(surface.id);
+    }
+  }
+
+  const existing = new Set(sheet.groups.filter(g => g.kind === 'ref')
+    .map(g => JSON.stringify([...new Set(g.members)].sort())));
+  const seenCandidates = new Set();
+  const candidates = [...byPair.values()]
+    .map(members => [...members].sort())
+    .filter(members => {
+      if (members.length < 2) return false;
+      const key = JSON.stringify(members);
+      if (existing.has(key) || seenCandidates.has(key)) return false;
+      seenCandidates.add(key);
+      return true;
+    });
+  if (!candidates.length) {
+    toast('Aucune nouvelle référence à créer (il faut au moins 2 surfaces liées à la même pièce).');
+    return;
+  }
+
+  // Vérifie les références une par une : une configuration incompatible ne bloque
+  // pas la création des autres groupes qui, eux, peuvent être ajoutés.
+  const groups = sheet.groups.slice(), accepted = [];
+  let incompatible = 0;
+  for (const members of candidates) {
+    const prospective = { id: uid(), kind: 'ref', members };
+    if (referenceConfigurationError(sheet, [...groups, prospective])) {
+      incompatible++;
+      continue;
+    }
+    groups.push(prospective);
+    accepted.push(members);
+  }
+  if (!accepted.length) {
+    toast(`Aucune référence ajoutée : ${incompatible} groupe(s) incompatible(s) avec la disposition des surfaces.`);
+    return;
+  }
+
+  checkpoint();
+  accepted.forEach(members => createGroup('ref', members));
+  cleanupCycles();
+  changed();
+  const result = `${accepted.length} référence${accepted.length > 1 ? 's' : ''} créée${accepted.length > 1 ? 's' : ''}`;
+  toast(`${result}${incompatible ? ` ; ${incompatible} incompatible${incompatible > 1 ? 's' : ''} ignorée${incompatible > 1 ? 's' : ''}` : ''}.`);
+}
+
 /* ===== Vue ===== */
 function zoomAt(f, cx, cy) {
   const v = S().view, k = clampN(v.k * f, 0.08, 6); f = k / v.k;
@@ -414,6 +472,7 @@ async function toolbarAction(a) {
     case 'pptx': exportPPTX(); break;
     case 'pdf': exportPDF(); break;
     case 'cyclo': closedLoopsDialog(); break;
+    case 'refauto': autoCreateReferences(); break;
     case 'copyimg': copyImage(); break;
     case 'undo': undo(); break;
     case 'redo': redo(); break;
