@@ -388,25 +388,27 @@ function cycleAction(action, id) {
   if (action === 'delete' && c) { checkpoint(); S().cycles = S().cycles.filter(x => x.id !== c.id); changed(); }
 }
 
+function cycleSnapshotSheet(source, c) {
+  const contents = cycleContents(c, source), sids = contents.surfaces, gids = contents.references;
+  const cf = source.cfgs.find(f => f.id === c.cfId);
+  if (!cf) throw new Error('La CF du cycle a été supprimée.');
+  sids.add(cf.a); sids.add(cf.b);
+  const surfaces = source.surfaces.filter(f => sids.has(f.id)), pids = new Set(surfaces.map(f => f.pieceId));
+  const sh = newSheet(source.name + ' — ' + cycleName(c));
+  Object.assign(sh, clone({ pieces: source.pieces.filter(p => pids.has(p.id)), surfaces,
+    liaisons: source.liaisons.filter(l => contents.links.has(l.id)), cfgs: [cf],
+    groups: source.groups.filter(g => g.kind === 'ref' && gids.has(g.id)).map(g => ({ ...g, members: g.members.filter(id => sids.has(id)) })),
+    cycles: [{ ...c, visible: true }], showNominalZero: false, cycleSnapshot: true }));
+  // Keep only the chosen surfaces, at their original positions after expanding pieces.
+  sh.surfaces.forEach(f => f.pinned = true);
+  return sh;
+}
+
 function extractCycles(cycles) {
   if (!cycles.length) return toast('Aucun cycle à extraire.');
   for (const c of cycles) { const err = cycleError(c); if (err) return toast('Extraction impossible : ' + err); }
   checkpoint();
-  const source = S(), sheets = [];
-  for (const c of cycles) {
-    const contents = cycleContents(c), sids = contents.surfaces, gids = contents.references;
-    const cf = C(c.cfId); sids.add(cf.a); sids.add(cf.b);
-    const surfaces = source.surfaces.filter(f => sids.has(f.id)), pids = new Set(surfaces.map(f => f.pieceId));
-    const lids = contents.links;
-    const sh = newSheet(source.name + ' — ' + cycleName(c));
-    Object.assign(sh, clone({ pieces: source.pieces.filter(p => pids.has(p.id)), surfaces,
-      liaisons: source.liaisons.filter(l => lids.has(l.id)), cfgs: [cf],
-      groups: source.groups.filter(g => g.kind === 'ref' && gids.has(g.id)).map(g => ({ ...g, members: g.members.filter(id => sids.has(id)) })),
-      cycles: [{ ...c, visible: true }], showNominalZero: false, cycleSnapshot: true }));
-    // Keep only the chosen surfaces, at their original positions after expanding pieces.
-    sh.surfaces.forEach(f => f.pinned = true);
-    sheets.push(sh);
-  }
+  const source = S(), sheets = cycles.map(c => cycleSnapshotSheet(source, c));
   doc.sheets.splice(doc.sheets.indexOf(source) + 1, 0, ...sheets); doc.active = sheets[0].id;
   sel.clear(); setTool('select'); changed(); fitView();
   toast(`${sheets.length} feuille(s) de cycle créée(s), prêtes à exporter en PNG / SVG.`);

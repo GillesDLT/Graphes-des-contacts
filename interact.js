@@ -510,14 +510,19 @@ function exportPDF() {
   try {
     tool = 'select'; cycleDraft = null; pick = []; pickCFs = []; pickRepLabels = []; marquee = null;
     sel.clear();
-    const pageCycles = cycles.length ? cycles : [null];
-    for (const cycle of pageCycles) {
+    // Page 1: vue d'ensemble complète, avec l'état d'affichage courant des cycles.
+    doc = clone(originalDoc);
+    render();
+    const overview = buildExportSVG();
+    if (overview) pages.push({ svg: overview.str, title: 'Vue d’ensemble' });
+    // Pages suivantes: mêmes instantanés isolés que l'action « Extraire en feuille ».
+    for (const cycle of cycles) {
       doc = clone(originalDoc);
-      const sheet = doc.sheets.find(s => s.id === doc.active) || doc.sheets[0];
-      sheet.cycles.forEach(c => { c.visible = !!cycle && c.id === cycle.id; });
+      const snapshot = cycleSnapshotSheet(sourceSheet, cycle);
+      doc.sheets = [snapshot]; doc.active = snapshot.id;
       render();
       const svg = buildExportSVG();
-      if (svg) pages.push({ svg: svg.str, title: cycle ? cycleName(cycle) : 'Graphe complet' });
+      if (svg) pages.push({ svg: svg.str, title: cycleName(cycle) });
     }
   } catch (error) {
     printWindow.close(); toast('Préparation du PDF impossible : ' + (error?.message || error)); return;
@@ -531,15 +536,15 @@ function exportPDF() {
   const pageHtml = pages.map((page, i) => `<section class="page"><header><b>${esc(sourceSheet.name)}</b><span>${esc(page.title)} · ${i + 1} / ${pages.length}</span></header><main>${page.svg}</main></section>`).join('');
   printWindow.document.open();
   printWindow.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>${esc(fileBase())}.pdf</title><style>
-    @page{size:A4 landscape;margin:10mm}*{box-sizing:border-box}html,body{margin:0;padding:0;font-family:Arial,sans-serif;color:#1f2430}
-    .page{width:277mm;height:190mm;display:flex;flex-direction:column;break-after:page;page-break-after:always;overflow:hidden}
-    .page:last-child{break-after:auto;page-break-after:auto}.page header{height:10mm;flex:none;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #d7dbe3;margin-bottom:3mm;font-size:10pt}
+    @page{size:A4 landscape;margin:0}*{box-sizing:border-box}html,body{margin:0;padding:0;font-family:Arial,sans-serif;color:#1f2430}
+    .page{width:296mm;height:209mm;padding:8mm;display:flex;flex-direction:column;break-after:page;overflow:hidden}
+    .page:last-child{break-after:auto}.page header{height:10mm;flex:none;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #d7dbe3;margin-bottom:3mm;font-size:10pt}
     .page main{flex:1;min-height:0;display:flex;align-items:center;justify-content:center}.page svg{display:block;width:100%;height:100%;object-fit:contain}
-    @media screen{body{background:#e5e7eb}.page{background:#fff;margin:12px auto;padding:0;box-shadow:0 2px 12px #0003}}
-    @media print{.page{margin:0;box-shadow:none}}
+    @media screen{body{background:#e5e7eb}.page{background:#fff;margin:12px auto;padding:8mm;box-shadow:0 2px 12px #0003}}
+    @media print{.page{margin:0}}
   </style></head><body>${pageHtml}<script>window.addEventListener('load',()=>setTimeout(()=>{window.focus();window.print()},250));</script></body></html>`);
   printWindow.document.close();
-  toast(`PDF prêt : ${pages.length} page(s), une par cycle. Choisissez « Enregistrer au format PDF » dans la fenêtre d’impression.`);
+  toast(`PDF prêt : vue d’ensemble puis ${cycles.length} cycle(s) isolé(s). Choisissez « Enregistrer au format PDF » dans la fenêtre d’impression.`);
 }
 function exportPPTX() { exportFileDialog({ title: 'Exporter en PowerPoint (formes modifiables)', extension: '.pptx', mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', makeBlob: makePptxBlob }); }
 async function copyImage() {

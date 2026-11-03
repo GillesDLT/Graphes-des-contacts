@@ -38,7 +38,7 @@ projets ou comptes rendus.
 - Afficher ou masquer les cycles, choisir leur couleur et gérer les CF en noir
   ou dans leur couleur.
 - Compter les cycles non indépendants passant par chaque CF et calculer le nombre de cycles indépendants par le nombre cyclomatique.
-- Exporter en **PDF multipage**, avec une page par cycle dessiné à la main, ou exporter en PNG, SVG ou PowerPoint éditable.
+- Exporter en **PDF multipage** : une vue d’ensemble, puis une page isolée par cycle dessiné à la main ; exporter aussi en PNG, SVG ou PowerPoint éditable.
 - Ajouter des notes textuelles déplaçables et choisir un nom/emplacement au moment de l’export.
 - Afficher une image de référence flottante pendant le travail.
 - Enregistrer et rouvrir les graphes au format **JSON**.
@@ -221,7 +221,7 @@ envoyer le fichier JSON.**
 
 ### PDF : un cycle par page
 
-Le bouton **PDF** ouvre l’aperçu d’impression du navigateur. Choisir **Enregistrer au format PDF** pour créer un document A4 paysage avec une page par cycle construit manuellement. Chaque page conserve le graphe complet et met en évidence un seul cycle, même si ce cycle était masqué dans l’application. Sans cycle construit, le PDF contient une page avec le graphe complet.
+Le bouton **PDF** ouvre l’aperçu d’impression du navigateur. Choisir **Enregistrer au format PDF** pour créer un document A4 paysage. La première page montre le graphe entier ; les pages suivantes contiennent chacune un cycle isolé, selon le même principe que **Extraire en feuille** (pièces, surfaces, liaisons, références et CF nécessaires au cycle). Sans cycle construit, le PDF contient seulement la vue d’ensemble.
 
 ### PNG / SVG : pour un compte rendu
 
