@@ -302,8 +302,14 @@ function renderOverlay() {
     } else if (kd === 'liaison') {
       const g = linkGeom(L(id)); if (g && liaisonVisible(L(id))) o += `<path d="${linkPath(g)}" fill="none" stroke="${blue}" stroke-opacity="0.45" stroke-width="${7 / k}" stroke-linecap="round" pointer-events="none"/>`;
     } else if (kd === 'group') {
-      const sh = groupShape(G(id));
+      const g = G(id), sh = groupShape(g);
       if (sh.loops.length) o += `<path d="${shapePath(sh)}" fill="none" stroke="${blue}" stroke-width="${2.5 / k}" stroke-dasharray="${6 / k} ${4 / k}"/>`;
+      if (g?.kind === 'fonc' && g.collapsed && sh.host && sel.size === 1 && tool === 'select') {
+        const h = sh.host;
+        const handle = (x, y, t) => `<rect data-handle="${t}" data-pid="${g.id}" x="${x - hs}" y="${y - hs}" width="${2 * hs}" height="${2 * hs}" fill="#fff" stroke="${blue}" stroke-width="${sw}"><title>Glisser pour modifier la forme de l’ellipse</title></rect>`;
+        o += `<rect x="${h.x - h.rx}" y="${h.y - h.ry}" width="${2 * h.rx}" height="${2 * h.ry}" fill="none" stroke="${blue}" stroke-opacity="0.35" stroke-width="${1 / k}" pointer-events="none"/>`;
+        o += handle(h.x + h.rx, h.y, 'e') + handle(h.x, h.y + h.ry, 's') + handle(h.x + h.rx, h.y + h.ry, 'se');
+      }
     } else if (kd === 'cfg') {
       const c = C(id), g = linkGeom(c);
       if (g && liaisonVisible(c)) o += `<path d="${linkPath(g)}" fill="none" stroke="${blue}" stroke-opacity="0.4" stroke-width="${8 / k}" stroke-linecap="round" pointer-events="none"/>`;

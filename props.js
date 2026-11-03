@@ -93,13 +93,13 @@ function groupPanel(g) {
   const memb = g.members.map(id => g.kind === 'ref' ? (SF(id) ? sname(SF(id)) : null) : (P(id) ? P(id).name : null)).filter(Boolean);
   return `<h3>▣ ${KIND_NAMES[g.kind]}</h3>
     ${g.kind === 'fonc' ? `<div class="btns" style="margin:0 0 8px"><button data-pa="collapse" class="primary" title="Double-clic sur le groupe ou bouton ${g.collapsed ? '+' : '−'} en haut du groupe">${g.collapsed ? '⊞ Développer le groupe' : '⊟ Réduire en une seule ellipse'}</button></div>` +
-      (g.collapsed ? '<div class="muted" style="margin-bottom:6px">Les pièces et les liaisons internes sont masquées ; seules les surfaces en contact avec l\'extérieur sont affichées.</div>' : '') : ''}
+      (g.collapsed ? '<div class="muted" style="margin-bottom:6px">Les pièces et les liaisons internes sont masquées ; seules les surfaces en contact avec l\'extérieur sont affichées. Sélectionnez l’ellipse pour afficher ses poignées bleues : droite = largeur, bas = hauteur, coin = les deux (Maj au glisser pour conserver les proportions).</div>' : '') : ''}
     ${g.kind === 'rep' ? fRow('Répétitions', `<span class="spin"><button data-pa="cnt-1">−</button>${fNum('count', g.count, 2)}<button data-pa="cnt+1">＋</button></span>`) : ''}
     ${g.kind === 'rep' ? `<h4>CF incluses (${(g.cfIds || []).length})</h4><div class="muted">${(g.cfIds || []).map(C).filter(Boolean).map(c => esc(cfDisplayName(c))).join(', ') || 'Aucune'}</div><p class="muted">« Modifier les membres », puis cliquer sur une surface de CF pour inclure / retirer la CF entière.</p>` : ''}
     ${g.kind === 'fonc' ? `<h4>Titres de répétition inclus (${(g.repLabelIds || []).length})</h4><div class="muted">${(g.repLabelIds || []).map(G).filter(Boolean).map(g => esc(repText(g))).join(', ') || 'Aucun'}</div><p class="muted">« Modifier les membres », puis cliquer sur un titre visible pour l’inclure au contour. Ses pièces ne deviennent pas membres automatiquement.</p>` : ''}
     ${g.lab ? '<div class="btns" style="margin:0 0 6px"><button data-pa="labauto">↺ Position automatique du nom</button></div>' : ''}
     ${fRow('Nom', fText('name', g.name, g.kind === 'rep' ? 'affiché après ×N' : 'nom déplaçable sur le graphe'))}
-    <p class="muted">Glisser le nom pour le déplacer et adapter la forme du groupe ; double-clic pour réinitialiser.</p>
+    ${g.kind === 'fonc' && g.collapsed ? '' : '<p class="muted">Glisser le nom pour le déplacer et adapter la forme du groupe ; double-clic pour réinitialiser.</p>'}
     ${fRow('Couleur fond', fColor('color'))}
     ${fRow('Opacité fond', `<input type="range" min="0" max="1" step="0.05" data-k="opacity" data-num value="${g.opacity}">`)}
     ${fRow('Contour', fColor('stroke'))}

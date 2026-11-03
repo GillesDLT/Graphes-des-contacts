@@ -201,8 +201,12 @@ svg.addEventListener('pointerdown', e => {
     drag = { type: 'glabel', g, c, grab: lp ? { x: pt.x - lp.x, y: pt.y - lp.y } : { x: 0, y: 0 }, snap: snapshot(), moved: false }; render(); return;
   }
   if (h && h.kind === 'handle') {
-    const p = P(h.id);
-    drag = { type: 'resize', p, handle: h.handle, snap: snapshot(), rx: p.rx, ry: p.ry, moved: false };
+    const p = P(h.id), g = G(h.id);
+    if (p) drag = { type: 'resize', p, handle: h.handle, snap: snapshot(), rx: p.rx, ry: p.ry, moved: false };
+    else if (g?.kind === 'fonc' && g.collapsed) {
+      const host = groupHost(g);
+      if (host) drag = { type: 'resizeGroup', g, handle: h.handle, snap: snapshot(), rx: host.rx, ry: host.ry, x: host.x, y: host.y, moved: false };
+    }
     return;
   }
   if (h && h.kind === 'llabel') {
@@ -264,14 +268,16 @@ svg.addEventListener('pointermove', e => {
     drag.notes.forEach(([n, x, y]) => { n.x = x + dx; n.y = y + dy; });
     render(); return;
   }
-  if (drag.type === 'resize') {
-    const p = drag.p;
+  if (drag.type === 'resize' || drag.type === 'resizeGroup') {
+    const group = drag.type === 'resizeGroup';
+    const target = group ? drag.g : drag.p, cx = group ? drag.x : target.x, cy = group ? drag.y : target.y;
     if (!drag.moved) { checkpoint(drag.snap); drag.moved = true; }
     let rx = drag.rx, ry = drag.ry;
-    if (drag.handle !== 's') rx = Math.max(30, Math.abs(pt.x - p.x));
-    if (drag.handle !== 'e') ry = Math.max(30, Math.abs(pt.y - p.y));
+    if (drag.handle !== 's') rx = Math.max(30, Math.abs(pt.x - cx));
+    if (drag.handle !== 'e') ry = Math.max(30, Math.abs(pt.y - cy));
     if (drag.handle === 'se' && e.shiftKey) { const f = Math.max(rx / drag.rx, ry / drag.ry); rx = drag.rx * f; ry = drag.ry * f; }
-    p.rx = rx; p.ry = ry;
+    if (group) { target.crx = rx; target.cry = ry; }
+    else { target.rx = rx; target.ry = ry; }
     render(); return;
   }
   if (drag.type === 'glabel') {
