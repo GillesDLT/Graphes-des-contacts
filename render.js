@@ -41,7 +41,12 @@ function pieceNameSVG(p) {
   return `<text data-id="${p.id}" data-kind="piece" x="${r1(na.x)}" y="${r1(na.y + fs * 0.35)}" text-anchor="middle" font-size="${r1(fs)}" font-weight="600" fill="${textOn(p.color)}" stroke="${p.color}" stroke-width="3" paint-order="stroke">${esc(p.name)}</text>`;
 }
 function surfSVG(s) {
-  const c = spos(s), name = sname(s);
+  const c = spos(s);
+  if (doc.settings.showSurfaces === false) {
+    const hitRadius = Math.max(s.r, 8 / S().view.k);
+    return `<g data-id="${s.id}" data-kind="surface"><circle cx="${r1(c.x)}" cy="${r1(c.y)}" r="${r1(hitRadius)}" fill="transparent" pointer-events="all"/></g>`;
+  }
+  const name = sname(s);
   const cf = cfOfSurface(s.id);
   const marked = cycleMarks.surfaces.has(s.id) && !cycleMarks.covered.has(s.id) && cf?.inColor !== false;
   const cycleColor = cycleMarks.colors.surfaces.get(s.id);
@@ -279,6 +284,9 @@ function render() {
   renderOverlay();
   $$('[data-tool]').forEach(b => b.classList.toggle('active', b.dataset.tool === tool));
   $('[data-act=details]').classList.toggle('active', !!doc.settings.showDetails);
+  const surfacesButton = $('[data-act=surfaces]');
+  surfacesButton.classList.toggle('active', doc.settings.showSurfaces !== false);
+  surfacesButton.setAttribute('aria-pressed', String(doc.settings.showSurfaces !== false));
   $('[data-act=grid]').classList.toggle('active', !!doc.settings.grid);
   $('[data-act=nominal0]').classList.toggle('active', !!(s.showNominalZero ?? doc.settings.showNominalZero));
   stage.className = stage.className.replace(/\bt-\w+/g, '').trim() + ' t-' + tool;
@@ -291,7 +299,7 @@ function renderOverlay() {
   for (const id of sel) {
     const kd = kindOf(id);
     if (kd === 'piece' && isHiddenPiece(id)) continue;
-    if (kd === 'surface' && !surfVisible(SF(id))) continue;
+    if (kd === 'surface' && (!surfVisible(SF(id)) || doc.settings.showSurfaces === false)) continue;
     if (kd === 'liaison' && !liaisonVisible(L(id))) continue;
     if (kd === 'piece') {
       const p = P(id);

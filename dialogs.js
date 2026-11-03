@@ -272,7 +272,7 @@ function settingsDialog() {
   });
   draw();
   const reset = el(`<button>Valeurs par défaut</button>`);
-  reset.onclick = () => { Object.assign(st, clone(DEFAULT_SETTINGS), { showDetails: st.showDetails, grid: st.grid }); draw(); };
+  reset.onclick = () => { Object.assign(st, clone(DEFAULT_SETTINGS), { showDetails: st.showDetails, showSurfaces: st.showSurfaces, grid: st.grid }); draw(); };
   openModal({
     title: '⚙ Paramètres', body: b, extraLeft: reset, wide: 820,
     onOk: () => { st.surfaceTypes = st.surfaceTypes.filter(t => t.code); st.liaisonTypes = st.liaisonTypes.filter(t => t.code); checkpoint(); doc.settings = st; changed(); }
@@ -287,7 +287,7 @@ function helpDialog() {
     <h4>Modélisation</h4><ul class="help-list">
       <li>${k('P')} <b>Nouvelle pièce</b> : nom unique, numéro (pour la nomenclature des surfaces), couleur. Avec Déplacer, double-clic sur le fond = pièce à cet endroit. Poignées bleues = étirer horizontalement / verticalement (Maj = proportionnel).</li>
       <li>Les surfaces se placent <b>automatiquement</b> le long du bord, orientées vers la pièce liée, pour limiter les croisements de liaisons. Avec Déplacer, glisser une surface la fait coulisser le long du bord et la fige (point bleu) ; décocher/cocher « Placement automatique » dans le panneau pour la libérer. Le type <b>SC — Surface complexe</b> remplace Came (les anciens types CA sont convertis à l'ouverture).</li>
-      <li><b>Surfaces</b> : créées avec une liaison de contact ou une CF. Nomenclature automatique <i>TYPE.n°pièce.n°surface</i> (ex. PL.1.1). Supprimer une surface ou son lien supprime le lien <b>et</b> ses deux surfaces (une surface de contact encore utilisée par une autre liaison est conservée).</li>
+      <li><b>Surfaces</b> : créées avec une liaison de contact ou une CF. Nomenclature automatique <i>TYPE.n°pièce.n°surface</i> (ex. PL.1.1). Le bouton <b>Surfaces</b> de la barre masque ou réaffiche leurs symboles et noms sans masquer les liaisons ; les marqueurs sont dessinés derrière les liaisons. Supprimer une surface ou son lien supprime le lien <b>et</b> ses deux surfaces (une surface de contact encore utilisée par une autre liaison est conservée).</li>
       <li>${k('L')} <b>Nouvelle liaison</b> : ${k('Ctrl')}+clic sur 2 pièces → fenêtre de création (type, répétition, surfaces, détails, schéma). Si 2 pièces sont déjà sélectionnées, ${k('L')} ouvre directement la fenêtre. Double-clic sur une pièce = démarrer une liaison depuis elle ; double-clic sur une liaison = modifier. Après validation, l'outil revient sur Déplacer.</li>
       <li>${k('R')} <b>Répétition</b> : ${k('Ctrl')}+clic sur les pièces répétées, puis ${k('Entrée')}. La zone est plus proche des pièces qu'un groupe fonctionnel et inclut les contacts extérieurs. Cliquer sur une surface de CF pour inclure / retirer la <b>CF entière et ses deux surfaces</b> ; les CF sont exclues par défaut. « Modifier les membres » permet de changer ce choix. « ×2 » par défaut ; glisser le nom pour le déplacer, double-clic pour revenir au placement automatique.</li>
       <li>Quand un groupe fonctionnel est réduit, les répétitions purement internes sont masquées. Si une répétition a un contact extérieur (ou une CF extérieure incluse), son contour suit seulement les <b>surfaces et les liaisons concernées</b>, y compris leurs arcs : il n'englobe pas la bulle fonctionnelle entière. Développer le groupe restitue la répétition complète.</li>

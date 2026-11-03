@@ -423,6 +423,7 @@ async function toolbarAction(a) {
     case 'zoomout': zoomAt(1 / 1.2, r.width / 2, r.height / 2); break;
     case 'fit': fitView(); break;
     case 'grid': doc.settings.grid = !doc.settings.grid; changed(false); break;
+    case 'surfaces': doc.settings.showSurfaces = doc.settings.showSurfaces === false; changed(false); break;
     case 'details': checkpoint(); doc.settings.showDetails = !doc.settings.showDetails; changed(); break;
     case 'nominal0': {
       checkpoint();

@@ -24,7 +24,8 @@ projets ou comptes rendus.
 - Créer et déplacer des pièces, représentées par des ellipses.
 - Créer des liaisons avec leurs deux surfaces de contact.
 - Choisir les types de surfaces et de liaisons, leurs couleurs et leurs
-  répétitions.
+  répétitions ; masquer ou réafficher les symboles et noms des surfaces sans
+  masquer les liaisons.
 - Définir des axes et normales : `x`, `y`, `z` ou une direction personnalisée.
   La notation `u_123` affiche le suffixe « 123 » en indice.
 - Organiser l’assemblage avec des groupes fonctionnels, des répétitions et des
@@ -127,6 +128,10 @@ séparément sous le nom de la pièce.
 Le bouton **?** ouvre une aide plus détaillée dans l’application.
 
 ## Groupes, CF et cycles
+
+### Surfaces et liaisons
+
+Le bouton **Surfaces** de la barre d’outils masque ou réaffiche les symboles et noms des surfaces. Les liaisons restent visibles et les surfaces sont dessinées derrière elles lorsqu’elles sont affichées. Le masquage est visuel : les surfaces restent sélectionnables.
 
 ### Organiser les pièces
 

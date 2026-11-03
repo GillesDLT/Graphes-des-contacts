@@ -56,6 +56,7 @@ const DEFAULT_SETTINGS = {
     { code: 'PO', label: 'Ponctuelle (sphère-plan)', fields: ['point', 'normale'], symbol: 'PO', sA: 'SP', sB: 'PL' }
   ],
   showDetails: false,
+  showSurfaces: true,
   showNominalZero: false,
   grid: true,
   groupColors: { rep: '#e9edf6', fonc: '#fde7c4', ref: '#2b7de9' }
