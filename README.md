@@ -36,7 +36,7 @@ projets ou comptes rendus.
   CF par cycle.
 - Afficher ou masquer les cycles, choisir leur couleur et gérer les CF en noir
   ou dans leur couleur.
-- Calculer les boucles fermées associées aux CF : un parcours entre les deux pièces d’une CF, sans repasser par la même pièce.
+- Compter les cycles non indépendants passant par chaque CF et calculer le nombre de cycles indépendants par le nombre cyclomatique.
 - Extraire chaque cycle dans une feuille dédiée, puis exporter en **PNG, SVG ou PowerPoint éditable**.
 - Ajouter des notes textuelles déplaçables et choisir un nom/emplacement au moment de l’export.
 - Afficher une image de référence flottante pendant le travail.
@@ -154,9 +154,11 @@ Le panneau **CF** liste toutes les conditions fonctionnelles de la feuille.
 Il permet de les afficher en noir ou dans leur couleur, individuellement ou
 toutes ensemble, sans effacer leur couleur enregistrée.
 
-### Calculer les boucles fermées liées aux CF
+### Compter les cycles
 
-Le bouton **Boucles CF** énumère, pour chaque CF, les chemins de liaisons entre les deux pièces qu’elle relie. La CF ferme chaque boucle ; une pièce ne peut pas être visitée deux fois. Les autres CF ne servent pas de contacts dans le parcours.
+Le bouton **Cycles** affiche le nombre de cycles non indépendants passant par chaque CF, sans détailler les parcours. Pour chaque CF, il compte les chemins de liaisons entre les deux pièces qu’elle relie ; la CF ferme le parcours et une pièce ne peut pas être visitée deux fois.
+
+Le même outil affiche le nombre de cycles indépendants (nombre cyclomatique) : **μ = nₗ − nₚ + 1**, avec *nₗ* le nombre de liaisons (liaisons de contact et CF) et *nₚ* le nombre de pièces. Pour un graphe déconnecté, le calcul ajoute le nombre *k* de composantes connexes : **μ = nₗ − nₚ + k**. Les groupes fonctionnels sont visuels et ne modifient pas le nombre de pièces comptées.
 
 ### Construire un cycle
 

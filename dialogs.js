@@ -67,55 +67,91 @@ async function saveExportFile({ name, extension, mime, makeBlob }) {
     if (error?.name !== 'AbortError') toast('Export impossible : ' + (error?.message || error));
   }
 }
-/* Boucles fermées associées aux CF : la CF ferme un chemin de contacts simples. */
+/* Comptage des cycles non indépendants par CF et du nombre cyclomatique. */
 function closedLoopsDialog() {
-  const sheet = S(), MAX_LOOPS = 2000, MAX_VISITS = 200000, MAX_DISPLAY = 80;
+  const sheet = S(), MAX_LOOPS = 2000, MAX_VISITS = 200000;
   const adjacency = new Map(sheet.pieces.map(p => [p.id, []]));
   for (const link of sheet.liaisons) {
     const a = SF(link.a), b = SF(link.b);
     if (!a || !b || a.pieceId === b.pieceId || !adjacency.has(a.pieceId) || !adjacency.has(b.pieceId)) continue;
-    adjacency.get(a.pieceId).push({ pieceId: b.pieceId, link });
-    adjacency.get(b.pieceId).push({ pieceId: a.pieceId, link });
+    adjacency.get(a.pieceId).push(b.pieceId);
+    adjacency.get(b.pieceId).push(a.pieceId);
   }
   let total = 0, truncatedAny = false;
   const cards = sheet.cfgs.map(cf => {
     const sa = SF(cf.a), sb = SF(cf.b), start = sa && sa.pieceId, target = sb && sb.pieceId;
     if (!start || !target || start === target || !adjacency.has(start) || !adjacency.has(target)) {
-      return `<section class="loop-card"><b>${esc(cfDisplayName(cf))}</b><p class="muted">CF sans deux pièces distinctes valides : impossible de fermer une boucle.</p></section>`;
+      return `<section class="loop-card"><h4>${esc(cfDisplayName(cf))}</h4><p class="muted">Impossible à calculer : cette CF ne relie pas deux pièces distinctes valides.</p></section>`;
     }
     let count = 0, visits = 0, truncated = false;
-    const found = [], pieces = [start], edges = [], visited = new Set([start]);
+    const visited = new Set([start]);
     const walk = current => {
       if (truncated) return;
       if (++visits > MAX_VISITS || count >= MAX_LOOPS) { truncated = true; return; }
-      if (current === target) {
-        count++;
-        if (found.length < MAX_DISPLAY) found.push({ pieces: pieces.slice(), edges: edges.slice() });
-        return;
-      }
+      if (current === target) { count++; return; }
       for (const next of adjacency.get(current) || []) {
-        if (visited.has(next.pieceId)) continue;
-        visited.add(next.pieceId); pieces.push(next.pieceId); edges.push(next.link);
-        walk(next.pieceId);
-        edges.pop(); pieces.pop(); visited.delete(next.pieceId);
+        if (visited.has(next)) continue;
+        visited.add(next);
+        walk(next);
+        visited.delete(next);
         if (truncated) return;
       }
     };
     walk(start); total += count; truncatedAny ||= truncated;
-    const format = loop => {
-      let out = esc(P(loop.pieces[0])?.name || '?');
-      loop.edges.forEach((link, i) => { const a = SF(link.a), b = SF(link.b); out += ` — ${esc(liaisonLabel(link))} [${esc(a ? sname(a) : '?')} ↔ ${esc(b ? sname(b) : '?')}] → ${esc(P(loop.pieces[i + 1])?.name || '?')}`; });
-      out += ` — ${esc(cfDisplayName(cf))} → ${esc(P(start)?.name || '?')}`;
-      return out;
-    };
-    const countLabel = truncated ? `≥ ${count} (recherche limitée)` : String(count);
-    return `<section class="loop-card"><h4>${esc(cfDisplayName(cf))} : ${countLabel} boucle(s)</h4>` +
-      (found.length ? `<ol>${found.map(loop => `<li>${format(loop)}</li>`).join('')}</ol>` : '<p class="muted">Aucune boucle simple ne relie les deux pièces de cette CF.</p>') +
-      (count > found.length ? `<p class="muted">Affichage limité aux ${found.length} premières boucles.</p>` : '') + '</section>';
+    const countLabel = truncated ? `≥ ${count}` : String(count);
+    const plural = count === 1 ? '' : 's';
+    return `<section class="loop-card"><h4>${esc(cfDisplayName(cf))} : ${countLabel} cycle${plural} non indépendant${plural}${truncated ? ' (recherche limitée)' : ''}</h4></section>`;
   });
-  const formula = '<p><b>Boucle fermée = chemin de liaisons entre les deux pièces de la CF + la CF qui referme le parcours.</b></p><p class="muted">Une même pièce ne peut apparaître qu’une seule fois dans le chemin. Les autres CF ne sont pas utilisées comme liaisons de parcours.</p>';
-  const summary = sheet.cfgs.length ? `<p><b>${total}${truncatedAny ? ' ou plus' : ''} boucle(s) trouvée(s)</b> dans ${sheet.cfgs.length} CF de « ${esc(sheet.name)} ».</p>` : '<p>Aucune CF dans cette feuille : une boucle doit être fermée par une CF.</p>';
-  openModal({ title: 'Boucles fermées liées aux CF', wide: 760, body: `${formula}${summary}${cards.join('')}`, noCancel: true });
+
+  // Un cycle élémentaire indépendant correspond à un surplus d'arêtes par
+  // rapport à une forêt couvrante : mu = E - V + C.
+  const pieces = sheet.pieces;
+  const graph = new Map(pieces.map(p => [p.id, []]));
+  let linkCount = 0;
+  const addGraphEdge = (a, b) => {
+    if (!graph.has(a) || !graph.has(b) || a === b) return;
+    graph.get(a).push(b); graph.get(b).push(a); linkCount++;
+  };
+  for (const link of sheet.liaisons) {
+    const a = SF(link.a), b = SF(link.b);
+    if (a && b) addGraphEdge(a.pieceId, b.pieceId);
+  }
+  // Chaque CF relie elle aussi deux pièces et ferme potentiellement un cycle.
+  for (const cf of sheet.cfgs) {
+    const a = SF(cf.a), b = SF(cf.b);
+    if (a && b) addGraphEdge(a.pieceId, b.pieceId);
+  }
+  let components = 0;
+  const seen = new Set();
+  for (const piece of pieces) {
+    if (seen.has(piece.id)) continue;
+    components++;
+    const stack = [piece.id]; seen.add(piece.id);
+    while (stack.length) {
+      for (const next of graph.get(stack.pop()) || []) {
+        if (!seen.has(next)) { seen.add(next); stack.push(next); }
+      }
+    }
+  }
+  const pieceCount = pieces.length;
+  const independent = Math.max(0, linkCount - pieceCount + components);
+  const formula = components === 1
+    ? `μ = n<sub>l</sub> − n<sub>p</sub> + 1 = ${linkCount} − ${pieceCount} + 1 = <b>${independent}</b>`
+    : `μ = n<sub>l</sub> − n<sub>p</sub> + k = ${linkCount} − ${pieceCount} + ${components} = <b>${independent}</b>`;
+  const summary = sheet.cfgs.length
+    ? `<p><b>Cycles non indépendants passant par une CF</b> : ${total}${truncatedAny ? ' ou plus' : ''} au total dans « ${esc(sheet.name)} ».</p>`
+    : '<p>Aucune CF dans cette feuille : aucun cycle non indépendant ne peut être compté par CF.</p>';
+  const loopInfo = sheet.cfgs.length
+    ? '<p class="muted">Pour chaque CF : nombre de chemins de liaisons entre ses deux pièces, la CF fermant le parcours. Une pièce ne peut pas être visitée deux fois. Seul le nombre est affiché.</p>'
+    : '';
+  const independentInfo = '<p><b>Nombre de cycles indépendants (nombre cyclomatique)</b></p>' +
+    `<p class="formula">${formula}</p>` +
+    `<p class="muted">n<sub>l</sub> = ${linkCount} liaison(s) (liaisons de contact + CF) ; n<sub>p</sub> = ${pieceCount} pièce(s) ; k = ${components} composante(s) connexe(s). Pour un graphe connexe, k = 1 et on retrouve μ = n<sub>l</sub> − n<sub>p</sub> + 1.</p>`;
+  openModal({
+    title: 'Cycles — comptage', wide: 760,
+    body: `${summary}${loopInfo}${cards.join('')}<hr>${independentInfo}`,
+    noCancel: true
+  });
 }
 
 /* Pipette écran (API EyeDropper : Edge / Chrome) */
@@ -265,7 +301,7 @@ function helpDialog() {
       <li><b>Nominal 0</b> : affiche / cache les bulles <i>n°pièce.0</i> reliées aux surfaces (contacts et CF). Glisser une bulle pour la déplacer à l'intérieur de sa pièce ; elle suit ensuite la pièce. Double-clic sur la bulle, ou bouton de réinitialisation dans le panneau de la pièce, pour revenir à la position initiale. La position reste conservée après enregistrement et copie. Les pièces masquées n'affichent pas de nominal.</li>
       <li>${k('C')} <b>CF</b> : clic sur deux pièces différentes → choisir un nom libre (texte, nombre ou vide) et les types des deux nouvelles surfaces. Le nom doit être unique dans la feuille, sans distinction de casse ou d'espaces extérieurs ; une seule CF sans nom est autorisée. Les anciens noms CF1, CF2… sont conservés à l'ouverture. Les surfaces sont propres à la CF ; supprimer la CF ou une de ses surfaces supprime les deux. L'option <b>Encadrer le libellé sur le trait</b> est disponible à la création et dans le panneau de la CF ; un nom vide n'affiche aucun texte ni cadre.</li>
       <li>Le panneau <b>CF</b> liste toutes les CF de la feuille : leur couleur est réglable et l'affichage peut être basculé individuellement ou toutes ensemble en <b>noir</b> ou dans leur <b>couleur enregistrée</b>. Le mode noir colore le lien, son libellé / cadre et ses surfaces propres, sans effacer les couleurs mémorisées. « Propriétés » ouvre les réglages détaillés.</li>
-      <li><b>Boucles CF</b> : énumère les chemins de liaisons fermés par chacune des CF. Une boucle part d’une pièce de la CF, passe par des contacts et revient à l’autre pièce de la même CF ; aucune pièce ne peut être répétée.</li>
+      <li><b>Cycles</b> : affiche, sans détailler les parcours, le nombre de cycles non indépendants passant par chaque CF et le nombre de cycles indépendants calculé par le nombre cyclomatique.</li>
       <li>${k('Y')} <b>Cycle</b> : partir d'une surface de CF, puis <b>clic ou Ctrl+clic</b> sur les surfaces ou références et terminer sur l'autre surface de <b>la même CF</b>. Une autre CF est refusée. <b>Ctrl+clic sur la dernière étape</b> ou ${k('Retour arrière')} la retire ; ${k('Échap')} annule. Surfaces, contacts, contours de références et courbes internes utilisent la <b>couleur du cycle</b> (orange par défaut), avec des pointillés passant près du centre des pièces. La CF garde son trait continu dans son propre mode noir / couleur, indépendamment du cycle. Aucun libellé « cycle N » n'est ajouté au graphe.</li>
       <li>Une référence est entourée en entier au lieu de surligner séparément ses surfaces. Tous ses contacts vers la pièce suivante sont inclus, même si une seule surface est cliquée. Ces surfaces et contacts sont également inclus dans la feuille exportée.</li>
       <li>Le panneau <b>Cycles</b> liste tous les cycles : numéro et couleur modifiables, visibilité individuelle, tout afficher dans leurs couleurs ou tout cacher, suppression. Changer la couleur d'un cycle masqué ne l'affiche pas. Sur un élément partagé, le <b>dernier cycle affiché</b> est prioritaire (priorité 1 dans le panneau) ; « Afficher en couleur » permet de le remettre au premier plan. Couleurs, visibilité et priorités sont conservées à l'enregistrement et dans les exports. La suppression d'un élément du parcours supprime aussi les cycles invalidés (notification).</li>

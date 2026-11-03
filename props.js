@@ -39,7 +39,7 @@ function emptyPanel() {
       <li>${k('Y')} : créer et afficher / cacher les cycles, ou les extraire en feuilles</li>
       <li><b>Nominal 0</b> : afficher / cacher les bulles n° de pièce . 0 reliées à toutes les surfaces</li>
     </ol>
-    <div class="btns"><button data-pa="cfs">Gérer les CF</button><button data-pa="cycles">Gérer les cycles</button><button data-pa="loopcalc">Calculer les boucles CF</button></div>
+    <div class="btns"><button data-pa="cfs">Gérer les CF</button><button data-pa="cycles">Gérer les cycles</button><button data-pa="loopcalc">Calculer les cycles</button></div>
     <h4>Navigation</h4>
     <div class="muted">${k('V')} / ${k('H')} Déplacer (par défaut) : glisser un élément pour le déplacer, glisser sur le fond vide pour déplacer la vue · ${k('Ctrl')}+clic : sélection multiple · ${k('Maj')}+glisser sur le fond : rectangle de sélection · Molette : zoom · Clic droit ou ${k('Espace')}+glisser : déplacer la vue même au-dessus d’un élément · ${k('0')} : tout afficher</div>
     <h4>Licence</h4><div class="license-note"><b>PolyForm Noncommercial 1.0.0</b><br>Usage personnel et non commercial autorisé.<br><b>Usage commercial : autorisation écrite préalable obligatoire.</b></div>`;
