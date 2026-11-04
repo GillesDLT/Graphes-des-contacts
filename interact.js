@@ -5,7 +5,7 @@ function setTool(t) {
   lastDown.t = 0;
   if (tool !== t) cycleDraft = null;
   if (t === 'cycle') sel.clear();
-  tool = t; pick = []; pickCFs = []; pickRepLabels = []; editGroupId = null; closePopup();
+  tool = t; pick = []; pickCFs = []; pickRepLabels = []; editGroupId = null; editSpecId = null; if (!popupEl?._keep) closePopup();
   render(); renderProps(); updateTip();
 }
 /* Mode de choix des membres d'un groupe (Ctrl+clic) */
@@ -41,6 +41,20 @@ function togglePick(id) {
   if (tool === 'rep') pickCFs = pickCFs.filter(id => C(id) && [C(id).a, C(id).b].some(sid => pick.includes(SF(sid).pieceId)));
   render();
 }
+/* ===== Outil Spécification (cadre de tolérance) ===== */
+function commitSpec() {
+  if (tool !== 'spec' || !pick.length) return;
+  const ids = pick.slice(); pick = [];
+  const sp = createSpec(ids);
+  if (!sp) return toast('Aucune cible valide.');
+  setTool('select'); sel.clear(); sel.add(sp.id); changed();
+  toast('Spécification créée — symboles, indications, indicateurs et liens dans le panneau de droite.');
+}
+function endSpecEdit() {
+  const id = editSpecId;
+  setTool('select');
+  if (id && (S().isoSpecs || []).some(x => x.id === id)) { sel.clear(); sel.add(id); changed(); }
+}
 function toggleCollapse(g) {
   if (!g || g.kind !== 'fonc') return;
   const error = referenceConfigurationError(S(), S().groups.map(x => x.id === g.id ? { ...x, collapsed: !x.collapsed } : x));
@@ -50,7 +64,10 @@ function toggleCollapse(g) {
 }
 $('#pickbar').addEventListener('click', e => {
   const b = e.target.closest('[data-pb]'); if (!b) return;
-  if (b.dataset.pb === 'ok') commitGroup(); else setTool('select');
+  if (b.dataset.pb === 'ok') {
+    if (tool === 'spec') { if (editSpecId) endSpecEdit(); else commitSpec(); }
+    else commitGroup();
+  } else setTool('select');
 });
 
 /* ===== Actions d'édition ===== */
@@ -64,7 +81,7 @@ function pasteClip() {
 }
 function duplicateSel() { if (!sel.size) return; const c = clip, n = pasteN; clip = collect([...sel]); pasteN = 0; pasteClip(); clip = c; pasteN = n; }
 function invertSel() { const all = S().pieces.map(p => p.id); const cur = new Set(sel); sel.clear(); all.forEach(id => { if (!cur.has(id)) sel.add(id); }); changed(); }
-function selectAll() { sel.clear(); S().pieces.forEach(p => sel.add(p.id)); S().groups.forEach(g => sel.add(g.id)); S().cfgs.forEach(c => sel.add(c.id)); (S().notes || []).forEach(n => sel.add(n.id)); changed(); }
+function selectAll() { sel.clear(); S().pieces.forEach(p => sel.add(p.id)); S().groups.forEach(g => sel.add(g.id)); S().cfgs.forEach(c => sel.add(c.id)); (S().notes || []).forEach(n => sel.add(n.id)); (S().isoRefs || []).forEach(r => sel.add(r.id)); (S().isoSpecs || []).forEach(x => sel.add(x.id)); changed(); }
 function extractToSheet() {
   if (!sel.size) return;
   const data = collect([...sel]); checkpoint();
@@ -147,6 +164,7 @@ function fitView() {
 
 /* ===== Souris ===== */
 function hitOf(e) {
+  const specBend = e.target.closest('[data-spec-bend]'); if (specBend) return { kind: 'specBend', id: specBend.dataset.specBend, ti: specBend.dataset.ti };
   const bend = e.target.closest('[data-bend-id]'); if (bend) return { kind: 'bend', id: bend.dataset.bendId };
   const h = e.target.closest('[data-handle]'); if (h) return { kind: 'handle', id: h.dataset.pid, handle: h.dataset.handle };
   const n = e.target.closest('[data-id]'); if (!n) return null;
@@ -158,11 +176,11 @@ function colorKeyOf(h) { return h && ['piece', 'surface', 'liaison', 'group', 'c
 svg.addEventListener('contextmenu', e => e.preventDefault());
 let lastDown = { t: 0, x: 0, y: 0, key: null };
 svg.addEventListener('pointerdown', e => {
-  closePopup();
+  if (!popupEl?._keep) closePopup();
   if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
   const pt = toWorld(e), h = hitOf(e);
   if (e.ctrlKey || e.metaKey || e.shiftKey || spaceDown || e.button !== 0) lastDown.t = 0;
-  if (e.button === 0 && tool === 'select' && !spaceDown && !e.ctrlKey && !e.metaKey && !e.shiftKey && !(h && ['gtoggle', 'bend', 'handle'].includes(h.kind))) {
+  if (e.button === 0 && tool === 'select' && !spaceDown && !e.ctrlKey && !e.metaKey && !e.shiftKey && !(h && ['gtoggle', 'bend', 'specBend', 'handle'].includes(h.kind))) {
     const key = h ? h.kind + ':' + h.id : 'background';
     const now = performance.now(), isDbl = lastDown.t > 0 && key === lastDown.key && now - lastDown.t < 380 && Math.hypot(e.clientX - lastDown.x, e.clientY - lastDown.y) < 6;
     lastDown = { t: isDbl ? 0 : now, x: e.clientX, y: e.clientY, key };
@@ -177,6 +195,39 @@ svg.addEventListener('pointerdown', e => {
   if (e.button !== 0) return;
   svg.setPointerCapture(e.pointerId);
 
+  if (h?.kind === 'specBend') {
+    const ref=(S().isoRefs||[]).find(x=>x.id===h.id);
+    if(ref) { drag={type:'specBend',ref,start:pt,snap:snapshot(),moved:false}; return; }
+    const sp=(S().isoSpecs||[]).find(x=>x.id===h.id), t=sp&&(sp.targets||[])[+h.ti];
+    if(sp&&t) drag={type:'specBend',target:t,start:pt,snap:snapshot(),moved:false};
+    return;
+  }
+  if (tool === 'isoRef') {
+    if (h?.kind === 'surface') createIsoReference('surface',h.id);
+    else if (h?.kind === 'group' && G(h.id)?.kind === 'ref') createIsoReference('group',h.id);
+    else toast('Cliquez sur une surface ou sur un groupe de références.');
+    return;
+  }
+  if (tool === 'spec') {
+    const isTarget = h && (h.kind === 'surface' || ((h.kind === 'group' || h.kind === 'glabel') && G(h.id)?.kind === 'ref'));
+    if (!isTarget) return toast('Cliquez sur une surface ou sur un groupe de références.');
+    if (editSpecId) {
+      const sp = (S().isoSpecs || []).find(x => x.id === editSpecId);
+      if (!sp) { setTool('select'); return; }
+      const kind = SF(h.id) ? 'surface' : 'group';
+      checkpoint();
+      const i = sp.targets.findIndex(t => t.targetId === h.id);
+      if (i >= 0) sp.targets.splice(i, 1);
+      else {
+        const target = { targetKind: kind, targetId: h.id, tip: 'arrow' };
+        const de = specDefaultElbow(sp, target);
+        target.elbowX = de.x; target.elbowY = de.y;
+        sp.targets.push(target);
+      }
+      changed(); updateTip(); return;
+    }
+    togglePick(h.id); render(); updateTip(); return;
+  }
   if (tool === 'cycle') {
     if (h && (h.kind === 'surface' || (['group', 'glabel'].includes(h.kind) && G(h.id)?.kind === 'ref'))) pickCycleNode(h.id, e.ctrlKey || e.metaKey);
     else toast('Choisissez une surface ou un groupe de références (pas une pièce).');
@@ -237,6 +288,20 @@ svg.addEventListener('pointerdown', e => {
   }
 
   // ---- outil sélection ----
+  if (h && ['isoRef','isoSpec'].includes(h.kind)) {
+    if (e.ctrlKey || e.shiftKey || e.metaKey) { if(sel.has(h.id)) sel.delete(h.id); else sel.add(h.id); }
+    else if(!sel.has(h.id)){sel.clear();sel.add(h.id);}
+    renderProps(); render();
+    if(sel.has(h.id)){
+      const o=obj(h.id);
+      drag={type:'specMove',o,kind:h.kind,start:pt,x:o.x,y:o.y,
+        ex:Number.isFinite(o.elbowX)?o.elbowX:null,ey:Number.isFinite(o.elbowY)?o.elbowY:null,
+        exs:(o.targets||[]).map(t=>Number.isFinite(t.elbowX)?t.elbowX:null),
+        eys:(o.targets||[]).map(t=>Number.isFinite(t.elbowY)?t.elbowY:null),
+        snap:snapshot(),moved:false};
+    }
+    return;
+  }
   if (h && h.kind === 'nominal') {
     if (e.ctrlKey || e.metaKey || e.shiftKey) {
       if (sel.has(h.id)) sel.delete(h.id); else sel.add(h.id);
@@ -307,6 +372,28 @@ svg.addEventListener('pointermove', e => {
     const v = S().view, dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
     if (Math.hypot(dx, dy) >= 3) { drag.moved = true; lastDown.t = 0; }
     v.x = drag.vx + dx; v.y = drag.vy + dy; renderView(); return;
+  }
+  if (drag.type === 'specMove') {
+    const dx=pt.x-drag.start.x,dy=pt.y-drag.start.y;
+    if(!drag.moved && Math.hypot(dx,dy)*S().view.k<3)return;
+    if(!drag.moved){checkpoint(drag.snap);drag.moved=true;lastDown.t=0;}
+    drag.o.x=drag.x+dx;drag.o.y=drag.y+dy;
+    if(drag.kind==='isoRef'){
+      if(Number.isFinite(drag.ex))drag.o.elbowX=drag.ex+dx;
+      if(Number.isFinite(drag.ey))drag.o.elbowY=drag.ey+dy;
+    } else {
+      (drag.o.targets||[]).forEach((t,i)=>{
+        if(Number.isFinite(drag.exs[i]))t.elbowX=drag.exs[i]+dx;
+        if(Number.isFinite(drag.eys[i]))t.elbowY=drag.eys[i]+dy;
+      });
+    }
+    render();return;
+  }
+  if (drag.type === 'specBend') {
+    if(!drag.moved && Math.hypot(pt.x-drag.start.x,pt.y-drag.start.y)*S().view.k<3)return;
+    if(!drag.moved){checkpoint(drag.snap);drag.moved=true;lastDown.t=0;}
+    const o=drag.ref||drag.target;
+    o.elbowX=pt.x;o.elbowY=pt.y;render();return;
   }
   if (drag.type === 'nominal') {
     if (!drag.moved && Math.hypot(pt.x - drag.start.x, pt.y - drag.start.y) * S().view.k < 3) return;
@@ -390,6 +477,24 @@ svg.addEventListener('pointercancel', () => {
 function onDouble(h, pt, e) {
   render();
   if (h && h.kind === 'note') return noteDialog(null, h.id);
+  if (h && h.kind === 'isoRef') {
+    const ref=(S().isoRefs||[]).find(x=>x.id===h.id); if(!ref) return;
+    if(isoType(ref)!=='partial') return askText('Identifiant de l’indicateur ISO',ref.text||'A',v=>{if(v){checkpoint();ref.text=v;changed();}});
+    const b = el(`<div>
+      <div class="row"><label>Texte haut</label><input type="text" id="isoTxtTop" value="${esc(ref.text||'')}"></div>
+      <div class="row"><label>Texte bas</label><input type="text" id="isoTxtBot" value="${esc(ref.textBottom||'')}"></div>
+      <div class="row"><label></label><label><input type="checkbox" id="isoItTop" ${ref.italic?'checked':''}> Italique haut</label> <label><input type="checkbox" id="isoItBot" ${ref.italicBottom?'checked':''}> Italique bas</label></div>
+    </div>`);
+    return openModal({ title: 'Référence partielle', body: b, onOk: () => {
+      checkpoint();
+      ref.text = $('#isoTxtTop', b).value.trim();
+      ref.textBottom = $('#isoTxtBot', b).value.trim();
+      ref.italic = $('#isoItTop', b).checked;
+      ref.italicBottom = $('#isoItBot', b).checked;
+      changed();
+    } });
+  }
+  if (h && h.kind === 'isoSpec') return specDialog(h.id);
   if (h && h.kind === 'nominal') { checkpoint(); delete P(h.id).nominal; changed(); return; }
   if (h && h.kind === 'glabel') { const g = G(h.id); checkpoint(); g.lab = null; changed(); return; }
   if (h && h.kind === 'group' && G(h.id).kind === 'fonc') return toggleCollapse(G(h.id));
@@ -406,7 +511,7 @@ svg.addEventListener('wheel', e => {
 }, { passive: false });
 
 /* ===== Clavier ===== */
-const TOOL_KEYS = { h: 'select', v: 'select', p: 'piece', l: 'liaison', r: 'rep', g: 'fonc', t: 'ref', c: 'cfg', y: 'cycle', n: 'note', i: 'pipette', b: 'paint' };
+const TOOL_KEYS = { h: 'select', v: 'select', p: 'piece', l: 'liaison', r: 'rep', g: 'fonc', t: 'ref', c: 'cfg', y: 'cycle', n: 'note', i: 'pipette', b: 'paint', s: 'spec' };
 document.addEventListener('keydown', e => {
   if (modalOpen) return;
   const tag = (e.target.tagName || '').toLowerCase();
@@ -428,6 +533,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') { closePopup(); sel.clear(); setTool('select'); return; }
   if (tool === 'cycle' && e.key === 'Backspace') { e.preventDefault(); cycleAction('back'); return; }
   if (tool === 'cycle' && e.key === 'Enter') { e.preventDefault(); saveCycleDialog(); return; }
+  if (tool === 'spec' && e.key === 'Enter') { e.preventDefault(); if (editSpecId) endSpecEdit(); else commitSpec(); return; }
   if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); doDelete(); return; }
   if (e.key === 'Enter' && tool === 'piece') { pieceDialog(null); return; }
   if (e.key === 'Enter' && isGroupTool()) { e.preventDefault(); commitGroup(); return; }
@@ -447,7 +553,7 @@ document.addEventListener('keydown', e => {
   }
 });
 document.addEventListener('keyup', e => { if (e.key === ' ') spaceDown = false; });
-document.addEventListener('pointerdown', e => { if (popupEl && !e.composedPath().some(n => n === popupEl || n === svg)) closePopup(); });
+document.addEventListener('pointerdown', e => { if (popupEl && !popupEl._keep && !e.composedPath().some(n => n === popupEl || n === svg)) closePopup(); });
 
 /* ===== Barre d'outils ===== */
 $('#toolbar').addEventListener('click', e => {
@@ -473,6 +579,7 @@ async function toolbarAction(a) {
     case 'pdf': exportPDF(); break;
     case 'cyclo': closedLoopsDialog(); break;
     case 'refauto': autoCreateReferences(); break;
+    case 'isogps': if (popupEl) closePopup(); else openIsoPopup(); break;
     case 'copyimg': copyImage(); break;
     case 'undo': undo(); break;
     case 'redo': redo(); break;
@@ -492,6 +599,7 @@ async function toolbarAction(a) {
       changed(); break;
     }
     case 'settings': settingsDialog(); break;
+    case 'github': window.open('https://github.com/GillesDLT/Graphes-des-contacts', '_blank', 'noopener'); break;
     case 'referenceimage': referenceImageAction('open'); break;
     case 'help': helpDialog(); break;
   }
@@ -520,11 +628,29 @@ $('#tabs').addEventListener('dblclick', e => {
 });
 
 /* ===== Export ===== */
+/* Police ISO embarquée en base64 dans les exports (SVG/PNG/PDF) : les images SVG
+   ne chargent pas les polices externes. Si le chargement échoue (ex. file://),
+   les textes ISO retombent sur la police de secours de leur pile. */
+const isoFontEmbed = { normal: '', italic: '' };
+(async () => {
+  try {
+    for (const [k, url] of [['normal', 'fonts/osifont.woff'], ['italic', 'fonts/osifont-italic.woff']]) {
+      const bytes = new Uint8Array(await (await fetch(url)).arrayBuffer());
+      let bin = ''; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+      isoFontEmbed[k] = btoa(bin);
+    }
+  } catch (e) { /* police non chargeable : exports avec police de secours */ }
+})();
+function isoFontStyle() {
+  if (!isoFontEmbed.normal) return '';
+  const face = (style, data) => `@font-face{font-family:'osifont';src:url(data:font/woff;base64,${data}) format('woff');font-weight:normal;font-style:${style}}`;
+  return `<style>${face('normal', isoFontEmbed.normal)}${isoFontEmbed.italic ? face('italic', isoFontEmbed.italic) : ''}</style>`;
+}
 function download(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); }
 const fileBase = () => S().name.replace(/[^\w\-À-ÿ ]+/g, '_').trim() || 'graphe';
 function saveJSON() { exportFileDialog({ title: 'Enregistrer le graphe JSON', extension: '.json', mime: 'application/json', makeBlob: () => new Blob([JSON.stringify(doc, null, 1)], { type: 'application/json' }) }); }
 function buildExportSVG() {
-  if (!S().pieces.length && !(S().notes || []).length) { toast('Graphe vide'); return null; }
+  if (!S().pieces.length && !(S().notes || []).length && !(S().isoRefs || []).length && !(S().isoSpecs || []).length) { toast('Graphe vide'); return null; }
   const box = $('#content').getBBox(), bb = { x0: box.x, y0: box.y, x1: box.x + box.width, y1: box.y + box.height };
   const m = 40, x = bb.x0 - m, y = bb.y0 - m, w = bb.x1 - bb.x0 + 2 * m, h = bb.y1 - bb.y0 + 2 * m;
   // Sérialiser le DOM SVG plutôt que de recopier innerHTML : les <text>/<tspan>
@@ -534,11 +660,12 @@ function buildExportSVG() {
   exported.querySelectorAll('[data-kind="gtoggle"], title').forEach(n => n.remove());
   exported.querySelectorAll('[data-id], [data-kind]').forEach(n => { n.removeAttribute('data-id'); n.removeAttribute('data-kind'); });
   exported.querySelectorAll('text').forEach(t => {
-    t.setAttribute('font-family', 'Arial, Liberation Sans, sans-serif');
+    const ff = t.getAttribute('font-family') || '';
+    t.setAttribute('font-family', ff.includes('osifont') ? ISO_FONT : 'Arial, Liberation Sans, sans-serif');
     t.setAttributeNS('http://www.w3.org/XML/1998/namespace', 'xml:space', 'preserve');
   });
   const inner = new XMLSerializer().serializeToString(exported);
-  return { w, h, str: `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${r1(w)}" height="${r1(h)}" viewBox="${r1(x)} ${r1(y)} ${r1(w)} ${r1(h)}" font-family="Arial, Liberation Sans, sans-serif" shape-rendering="geometricPrecision" text-rendering="geometricPrecision"><title>${esc(S().name)} — Graphe des contacts</title><desc>Graphe vectoriel comprenant pièces, surfaces, liaisons, groupes et notes.</desc><rect x="${r1(x)}" y="${r1(y)}" width="${r1(w)}" height="${r1(h)}" fill="#ffffff"/>${inner}</svg>` };
+  return { w, h, str: `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${r1(w)}" height="${r1(h)}" viewBox="${r1(x)} ${r1(y)} ${r1(w)} ${r1(h)}" font-family="Arial, Liberation Sans, sans-serif" shape-rendering="geometricPrecision" text-rendering="geometricPrecision"><title>${esc(S().name)} — Graphe des contacts</title><desc>Graphe vectoriel comprenant pièces, surfaces, liaisons, groupes et notes.</desc>${isoFontStyle()}<rect x="${r1(x)}" y="${r1(y)}" width="${r1(w)}" height="${r1(h)}" fill="#ffffff"/>${inner}</svg>` };
 }
 function exportSVG() { exportFileDialog({ title: 'Exporter en SVG vectoriel', extension: '.svg', mime: 'image/svg+xml', makeBlob: () => { const s = buildExportSVG(); return s ? new Blob([s.str], { type: 'image/svg+xml;charset=utf-8' }) : null; } }); }
 function renderPNG(scale = 3) {
@@ -561,7 +688,7 @@ function exportPDF() {
   const originalSelection = [...sel], originalPick = pick, originalPickCFs = pickCFs;
   const originalPickRepLabels = pickRepLabels, originalMarquee = marquee;
   const sourceSheet = originalDoc.sheets.find(s => s.id === originalDoc.active) || originalDoc.sheets[0];
-  if (!sourceSheet.pieces.length && !(sourceSheet.notes || []).length) {
+  if (!sourceSheet.pieces.length && !(sourceSheet.notes || []).length && !(sourceSheet.isoRefs || []).length && !(sourceSheet.isoSpecs || []).length) {
     printWindow.close(); toast('Graphe vide : rien à exporter.'); return;
   }
   const cycles = sourceSheet.cycles.filter(c => !cycleError(c, sourceSheet)).slice().sort((a, b) => a.num - b.num);

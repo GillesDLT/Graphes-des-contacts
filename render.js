@@ -281,6 +281,9 @@ function render() {
   $('#l-outlines').innerHTML = s.groups.slice().reverse().map(groupOutlineSVG).join('');
   $('#l-group-labels').innerHTML = s.groups.slice().reverse().map(groupLabelSVG).join('');
   $('#l-notes').innerHTML = (s.notes || []).map(noteSVG).join('');
+  $('#l-iso-specs').innerHTML =
+    (doc.settings.showIsoRefs === false ? '' : (s.isoRefs || []).map(isoRefSVG).join('')) +
+    (doc.settings.showSpecs === false ? '' : (s.isoSpecs || []).map(specSVG).join(''));
   renderOverlay();
   $$('[data-tool]').forEach(b => b.classList.toggle('active', b.dataset.tool === tool));
   $('[data-act=details]').classList.toggle('active', !!doc.settings.showDetails);
@@ -317,6 +320,19 @@ function renderOverlay() {
         const handle = (x, y, t) => `<rect data-handle="${t}" data-pid="${g.id}" x="${x - hs}" y="${y - hs}" width="${2 * hs}" height="${2 * hs}" fill="#fff" stroke="${blue}" stroke-width="${sw}"><title>Glisser pour modifier la forme de l’ellipse</title></rect>`;
         o += `<rect x="${h.x - h.rx}" y="${h.y - h.ry}" width="${2 * h.rx}" height="${2 * h.ry}" fill="none" stroke="${blue}" stroke-opacity="0.35" stroke-width="${1 / k}" pointer-events="none"/>`;
         o += handle(h.x + h.rx, h.y, 'e') + handle(h.x, h.y + h.ry, 's') + handle(h.x + h.rx, h.y + h.ry, 'se');
+      }
+    } else if (kd === 'isoRef') {
+      const ref=(S().isoRefs||[]).find(x=>x.id===id), t=ref&&isoTargetCenter(ref);
+      if(doc.settings.showIsoRefs!==false&&ref&&t&&isoTypeHasLeader(isoType(ref))){ const ex=ref.elbowX,ey=ref.elbowY; o+=`<circle data-spec-bend="${id}" cx="${r1(ex)}" cy="${r1(ey)}" r="${7/k}" fill="white" stroke="${blue}" stroke-width="${2/k}"><title>Glisser pour déplacer le coude de l’indicateur ISO</title></circle>`; }
+    } else if (kd === 'isoSpec') {
+      const sp = (S().isoSpecs || []).find(x => x.id === id);
+      if (doc.settings.showSpecs !== false && sp) {
+        const lay = specFrameLayout(sp);
+        o += `<rect x="${r1(sp.x)}" y="${r1(sp.y)}" width="${r1(lay.w)}" height="${r1(lay.h)}" fill="none" stroke="${blue}" stroke-width="${sw}" stroke-dasharray="${5 / k} ${3 / k}" pointer-events="none"/>`;
+        if (tool === 'select') (sp.targets || []).forEach((t, ti) => {
+          const e = specTargetElbow(sp, t);
+          o += `<circle data-spec-bend="${sp.id}" data-ti="${ti}" cx="${r1(e.x)}" cy="${r1(e.y)}" r="${7 / k}" fill="white" stroke="${blue}" stroke-width="${2 / k}"><title>Glisser pour déplacer le coude du lien</title></circle>`;
+        });
       }
     } else if (kd === 'cfg') {
       const c = C(id), g = linkGeom(c);
@@ -369,8 +385,18 @@ function renderOverlay() {
 const isGroupTool = () => tool === 'rep' || tool === 'fonc' || tool === 'ref';
 const GROUP_TOOL_NAMES = { rep: 'Répétition', fonc: 'Groupe fonctionnel', ref: 'Système de référence' };
 let editGroupId = null;
+let editSpecId = null;
 function renderPickbar() {
   const pb = $('#pickbar');
+  if (tool === 'spec') {
+    const sp = editSpecId && (S().isoSpecs || []).find(x => x.id === editSpecId);
+    const html = sp
+      ? `<span><b>Spécification</b> : <span class="cnt">${sp.targets.length} lien(s)</span> — <b>clic</b> sur une surface ou un groupe de références pour ajouter / retirer un lien</span><button class="primary" data-pb="ok">✔ Terminer <span class="kbd" style="color:#333">Entrée</span></button><button data-pb="cancel">Fermer</button>`
+      : `<span><b>Spécification</b> : <span class="cnt">${pick.length} cible(s)</span> — surfaces et groupes de références</span><button class="primary" data-pb="ok" ${pick.length ? '' : 'disabled'}>✔ Créer le cadre <span class="kbd" style="color:#333">Entrée</span></button><button data-pb="cancel">Annuler</button><span id="pickErr" class="err" role="alert"></span>`;
+    if (pb.dataset.h !== html) { pb.innerHTML = html; pb.dataset.h = html; }
+    pb.classList.add('show');
+    return;
+  }
   if (!isGroupTool()) { pb.classList.remove('show'); pb.innerHTML = ''; delete pb.dataset.h; return; }
   const unit = tool === 'ref' ? 'surface(s)' : 'pièce(s)';
   const html = `<span><b>${GROUP_TOOL_NAMES[tool]}</b>${editGroupId ? ' (modification)' : ''} : <span class="cnt">${pick.length} ${unit}${tool === 'rep' ? ' · ' + pickCFs.length + ' CF incluse(s)' : tool === 'fonc' ? ' · ' + pickRepLabels.length + ' titre(s) de répétition' : ''}</span></span>
@@ -398,10 +424,14 @@ const TIPS = {
   cycle: '<b>Clic ou Ctrl+clic</b> sur une surface de CF, puis les surfaces ou références — finir sur l’autre surface de la même CF. <b>Ctrl+clic sur la dernière étape</b> : retirer',
   pipette: '<b>Clic</b> sur un élément pour prélever sa couleur',
   paint: '<b>Clic</b> sur un élément pour lui appliquer la couleur courante',
-  note: '<b>Clic</b> sur le graphe pour ajouter une note. Elle se déplace ensuite avec l’outil Déplacer — <b>N</b>'
+  note: '<b>Clic</b> sur le graphe pour ajouter une note. Elle se déplace ensuite avec l’outil Déplacer — <b>N</b>',
+  spec: '<b>Clic</b> sur une ou plusieurs surfaces / groupes de références pour choisir les cibles, puis <b>Entrée</b> : le cadre de tolérance se règle ensuite dans le panneau de droite (symboles, indications, indicateurs, références, extrémités des liens)',
+  isoRef: '<b>Clic</b> sur une surface ou un groupe de références pour ajouter une référence ISO (cadre carré par défaut). Le panneau permet de la passer en référence partielle (cercle coupé en deux), de choisir les textes, leurs italiques et l’extrémité du rappel.'
 };
 function showTip(html) { const t = $('#tip'); t.innerHTML = html || ''; t.classList.toggle('show', !!html); }
 function updateTip() {
+  if (tool === 'spec' && editSpecId) return showTip('<b>Modification des liens</b> : <b>clic</b> sur une surface ou un groupe de références pour ajouter / retirer un lien — <b>Entrée</b> pour terminer');
+  if (tool === 'spec' && pick.length) return showTip(`<b>${pick.length} cible(s)</b> sélectionnée(s) — <b>clic</b> pour ajouter / retirer, <b>Entrée</b> pour créer le cadre de tolérance`);
   if (tool === 'liaison' && pick.length === 1) return showTip(`1<sup>re</sup> pièce : <b>${esc(P(pick[0])?.name)}</b> — <b>Ctrl + clic</b> sur la 2<sup>e</sup> pièce`);
   if (tool === 'cfg' && pick.length === 1) return showTip(`1<sup>re</sup> pièce : <b>${esc(endName(pick[0]))}</b> — clic sur une autre pièce`);
   if (tool === 'cycle' && cycleDraft) return showTip(`<b>${esc(cfDisplayName(C(cycleDraft.cfId)))}</b> : ${cycleDraft.nodes.length} nœud(s) — <b>Clic ou Ctrl+clic</b> sur un contact / une référence — <b>Ctrl+clic sur la dernière étape</b> ou <b>Retour arrière</b> : retirer`);
@@ -409,3 +439,6 @@ function updateTip() {
 }
 let toastT;
 function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 1800); }
+
+/* Le lettrage ISO (osifont) est chargé via CSS : une fois prêt, recalculer les largeurs de texte. */
+if (document.fonts?.ready) document.fonts.ready.then(() => render()).catch(() => {});

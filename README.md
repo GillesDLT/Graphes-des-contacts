@@ -33,6 +33,10 @@ projets ou comptes rendus.
 - Réduire un groupe fonctionnel à une bulle pour simplifier la lecture.
 - Créer des **CF — conditions fonctionnelles**, avec deux surfaces propres et un
   nom libre.
+- Annoter le graphe avec **ISO GPS** : références ISO (carré ou cercle partiel,
+  rappel à coude) et **spécifications** — des cadres de tolérance ISO 1101 avec
+  symboles de caractéristique, indications, indicateurs (Ⓜ maxi matière,
+  Ⓔ gabarit…) et liens flèche ou trait simple vers les surfaces.
 - Construire des cycles passant par les contacts et références, avec une seule
   CF par cycle.
 - Afficher ou masquer les cycles, choisir leur couleur et gérer les CF en noir
@@ -181,6 +185,31 @@ Le panneau **Cycles** permet de changer les couleurs, d’afficher ou de masquer
 les cycles et de les extraire dans des feuilles indépendantes. Lorsqu’un élément
 est partagé, le dernier cycle affiché est prioritaire ; l’ordre est indiqué
 dans le panneau.
+
+## ISO GPS : références et spécifications
+
+Le bouton **ISO GPS** ouvre une boîte flottante avec deux outils et les bascules
+pour masquer / afficher leurs symboles (utile avant export).
+
+- **Réf. ISO** : cliquer sur une surface ou un groupe de références pour poser
+  un indicateur (cadre carré par défaut, ou référence partielle en cercle coupé
+  en deux). Le rappel à deux segments se règle avec son coude bleu et se termine
+  par un triangle plein ou une flèche.
+- **Spécification** : cliquer sur une ou plusieurs surfaces / groupes de
+  références, puis **Entrée** crée un **cadre de tolérance**. Chaque compartiment
+  reçoit un symbole de caractéristique choisi dans une liste (droiture, planéité,
+  circularité, cylindricité, profils, perpendicularité, angulosité, parallélisme,
+  position, coaxialité, symétrie, battements…), une indication libre (valeur,
+  ⌀, lettre de référence…) et des indicateurs encerclés : **Ⓜ** condition de
+  plus grande matière (maxi matière), **Ⓔ** principe d’enveloppe (gabarit), **Ⓛ**
+  condition de plus petite matière, **Ⓣ** tangence, **Ⓕ** état libre.
+
+Les compartiments se déplacent, se suppriment et s’ajoutent. Le bouton
+« Ajouter / retirer un lien » permet d’ajuster les cibles et **chaque lien se
+régle en flèche, triangle plein ou trait simple**. Les poignées bleues déplacent
+le coude de chaque lien ; le double-clic sur le cadre ouvre la fenêtre d’édition.
+Les lettrages utilisent la police technique ISO 3098 (osifont), y compris dans
+les exports.
 
 ## Déplacements et raccourcis utiles
 

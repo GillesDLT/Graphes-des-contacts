@@ -57,6 +57,8 @@ const DEFAULT_SETTINGS = {
   ],
   showDetails: false,
   showSurfaces: true,
+  showIsoRefs: true,
+  showSpecs: true,
   showNominalZero: false,
   grid: true,
   groupColors: { rep: '#e9edf6', fonc: '#fde7c4', ref: '#2b7de9' }
@@ -65,7 +67,7 @@ const SYMBOLS = ['EN', 'PV', 'GL', 'PG', 'HE', 'ROT', 'RD', 'AP', 'LA', 'LR', 'P
 const FIELD_LABELS = { point: 'Point / centre', axe: 'Axe / direction', normale: 'Normale', pas: 'Pas' };
 
 /* ===== Document ===== */
-function newSheet(name) { return { id: uid(), name, pieces: [], surfaces: [], liaisons: [], groups: [], cfgs: [], cycles: [], notes: [], view: { x: 0, y: 0, k: 1 } }; }
+function newSheet(name) { return { id: uid(), name, pieces: [], surfaces: [], liaisons: [], groups: [], cfgs: [], cycles: [], notes: [], isoRefs: [], isoSpecs: [], view: { x: 0, y: 0, k: 1 } }; }
 function newDoc() { const s = newSheet('Graphe 1'); return { version: 2, sheets: [s], active: s.id, settings: clone(DEFAULT_SETTINGS) }; }
 let doc = newDoc();
 
@@ -86,9 +88,11 @@ function kindOf(id) {
   if (s.cfgs.some(o => o.id === id)) return 'cfg';
   if (s.cycles.some(o => o.id === id)) return 'cycle';
   if ((s.notes || []).some(o => o.id === id)) return 'note';
+  if ((s.isoRefs || []).some(o => o.id === id)) return 'isoRef';
+  if ((s.isoSpecs || []).some(o => o.id === id)) return 'isoSpec';
   return null;
 }
-const obj = id => P(id) || SF(id) || L(id) || G(id) || C(id) || CY(id) || (S().notes || []).find(o => o.id === id);
+const obj = id => P(id) || SF(id) || L(id) || G(id) || C(id) || CY(id) || (S().notes || []).find(o => o.id === id) || (S().isoRefs || []).find(o => o.id === id) || (S().isoSpecs || []).find(o => o.id === id);
 
 function ltype(code) {
   return doc.settings.liaisonTypes.find(t => t.code === code) || { code, label: code, fields: [], symbol: 'GEN', sA: 'PL', sB: 'PL' };
@@ -129,10 +133,16 @@ function loadDoc(o) {
   if (oldCame && !o.settings.surfaceTypes.some(t => t.code === 'SC')) o.settings.surfaceTypes.push({ code: 'SC', label: 'Surface complexe' });
   o.settings.liaisonTypes.forEach(t => { if (t.sA === 'CA') t.sA = 'SC'; if (t.sB === 'CA') t.sB = 'SC'; });
   o.sheets.forEach(s => {
-    ['pieces', 'surfaces', 'liaisons', 'groups', 'cfgs', 'cycles', 'notes'].forEach(k => {
+    ['pieces', 'surfaces', 'liaisons', 'groups', 'cfgs', 'cycles', 'notes', 'isoRefs', 'isoSpecs'].forEach(k => {
       if (s[k] == null) s[k] = [];
       if (!Array.isArray(s[k])) throw new Error('Liste invalide : ' + k);
     }); s.view = s.view || { x: 0, y: 0, k: 1 };
+    delete s.cartouches; // l'outil cartouche a été supprimé : anciennes données ignorées
+    s.isoSpecs.forEach(sp => {
+      if (!Array.isArray(sp.cells) || !sp.cells.length) sp.cells = [{ sym: '', text: '', mods: [] }];
+      sp.cells.forEach(c => { if (c.text == null) c.text = ''; if (!Array.isArray(c.mods)) c.mods = []; });
+      if (!Array.isArray(sp.targets)) sp.targets = [];
+    });
     migrateCFs(s);
     s.pieces.forEach(p => {
       delete p.shape;
@@ -428,6 +438,26 @@ function contentBBox(sheet = S()) {
   const pts = [];
   sheet.pieces.forEach(p => { pts.push([p.x - p.rx, p.y - p.ry], [p.x + p.rx, p.y + p.ry]); });
   sheet.groups.forEach(g => groupPoints(g).forEach(p => pts.push(p)));
+  if (doc.settings.showSpecs !== false) (sheet.isoSpecs || []).forEach(sp => {
+    const lay = specFrameLayout(sp);
+    pts.push([sp.x, sp.y], [sp.x + lay.w, sp.y + lay.h]);
+    (sp.targets || []).forEach(t => {
+      const c = isoTargetCenter(t); if (!c) return;
+      pts.push([c.x, c.y]);
+      const elbow = specTargetElbow(sp, t); pts.push([elbow.x, elbow.y]);
+      const edge = isoTargetBoundary(t, elbow); if (edge) pts.push([edge.x, edge.y]);
+    });
+  });
+  if (doc.settings.showIsoRefs !== false) (sheet.isoRefs || []).forEach(ref => {
+    const z=isoFrameSize(ref), t=isoTargetCenter(ref);
+    pts.push([ref.x,ref.y],[ref.x+z.w,ref.y+z.h]);
+    if(t){
+      pts.push([t.x,t.y]);
+      const elbow={x:ref.elbowX,y:ref.elbowY},edge=isoTargetBoundary(ref,elbow);
+      if(edge)pts.push([edge.x,edge.y]);
+      if(Number.isFinite(elbow.x)&&Number.isFinite(elbow.y))pts.push([elbow.x,elbow.y]);
+    }
+  });
   (sheet.notes || []).forEach(n => { const lines = noteLines(n); const w = Math.max(90, Math.min(340, Math.max(...lines.map(line => textW(line, '14px "Segoe UI", Arial, sans-serif') + 20)))); const h = lines.length * 19 + 20; pts.push([n.x, n.y], [n.x + w, n.y + h]); });
   sheet.surfaces.filter(surfVisible).forEach(s => { const p = spos(s); pts.push([p.x - s.r, p.y - s.r], [p.x + s.r, p.y + s.r]); });
   if (!pts.length) return null;
@@ -486,6 +516,10 @@ function deleteIds(ids) {
   s.groups = s.groups.filter(x => !del.has(x.id));
   s.cycles = s.cycles.filter(x => !del.has(x.id));
   s.notes = (s.notes || []).filter(x => !del.has(x.id));
+  s.isoRefs = (s.isoRefs || []).filter(x => !del.has(x.id) && !del.has(x.targetId) && (x.targetKind !== 'group' || s.groups.some(g => g.id === x.targetId)));
+  s.isoSpecs = (s.isoSpecs || []).filter(x => !del.has(x.id));
+  s.isoSpecs.forEach(sp => sp.targets = (sp.targets || []).filter(t => !del.has(t.targetId)));
+  s.isoSpecs = s.isoSpecs.filter(sp => sp.targets.length);
   cleanupOrphans(s);
 }
 function cleanupOrphans(s = S()) {
@@ -510,6 +544,9 @@ function cleanupOrphans(s = S()) {
     return cf && s.surfaces.some(f => (cf.a === f.id || cf.b === f.id) && g.members.includes(f.pieceId));
   }));
   s.groups = s.groups.filter(g => g.members.length);
+  s.isoRefs = (s.isoRefs || []).filter(r => !r.targetKind || (r.targetKind === 'surface' ? s.surfaces.some(f=>f.id===r.targetId) : s.groups.some(g=>g.id===r.targetId)));
+  (s.isoSpecs = s.isoSpecs || []).forEach(sp => sp.targets = (sp.targets || []).filter(t => t.targetKind === 'surface' ? s.surfaces.some(f => f.id === t.targetId) : s.groups.some(g => g.id === t.targetId)));
+  s.isoSpecs = s.isoSpecs.filter(sp => sp.targets.length);
   const repetitions = new Set(s.groups.filter(g => g.kind === 'rep').map(g => g.id));
   s.groups.filter(g => g.kind === 'fonc').forEach(g => g.repLabelIds = [...new Set(g.repLabelIds || [])].filter(id => repetitions.has(id)));
   if (cleanupCycles(s)) cleanupOrphans(s);
@@ -517,7 +554,7 @@ function cleanupOrphans(s = S()) {
 
 /* ===== Copier / coller / dupliquer ===== */
 function collect(ids) {
-  const s = S(); const pids = new Set(), groupIds = new Set(ids.filter(id => G(id))), noteIds = new Set(ids.filter(id => kindOf(id) === 'note'));
+  const s = S(); const pids = new Set(), groupIds = new Set(ids.filter(id => G(id))), noteIds = new Set(ids.filter(id => kindOf(id) === 'note')), isoRefIds = new Set(ids.filter(id => kindOf(id) === 'isoRef')), isoSpecIds = new Set(ids.filter(id => kindOf(id) === 'isoSpec'));
   for (const id of ids) {
     const k = kindOf(id);
     if (k === 'piece') pids.add(id);
@@ -545,7 +582,9 @@ function collect(ids) {
     return included.has(c.cfId) && [...contents.surfaces, ...contents.references, ...contents.links].every(id => included.has(id));
   });
   const notes = (s.notes || []).filter(n => noteIds.has(n.id));
-  return clone({ pieces, surfaces, liaisons, groups, cfgs, cycles, notes, cycleSnapshot: !!s.cycleSnapshot, from: s.id });
+  const isoRefs = (s.isoRefs || []).filter(r => isoRefIds.has(r.id));
+  const isoSpecs = (s.isoSpecs || []).filter(x => isoSpecIds.has(x.id));
+  return clone({ pieces, surfaces, liaisons, groups, cfgs, cycles, notes, isoRefs, isoSpecs, cycleSnapshot: !!s.cycleSnapshot, from: s.id });
 }
 function pasteData(data, offset) {
   const s = S(); const map = new Map(); const nid = id => { if (!map.has(id)) map.set(id, uid()); return map.get(id); };
@@ -573,6 +612,17 @@ function pasteData(data, offset) {
     s.cfgs.push(c);
   }
   for (const n of d.notes || []) { n.id = nid(n.id); n.x += offset; n.y += offset; s.notes.push(n); }
+  for (const r of d.isoRefs || []) { r.id=nid(r.id); r.targetId=map.get(r.targetId)||r.targetId; r.x+=offset; r.y+=offset; if(Number.isFinite(r.elbowX))r.elbowX+=offset; if(Number.isFinite(r.elbowY))r.elbowY+=offset; s.isoRefs.push(r); }
+  for (const sp of d.isoSpecs || []) {
+    sp.id = nid(sp.id);
+    (sp.targets || []).forEach(t => {
+      t.targetId = map.get(t.targetId) || t.targetId;
+      if (Number.isFinite(t.elbowX)) t.elbowX += offset;
+      if (Number.isFinite(t.elbowY)) t.elbowY += offset;
+    });
+    sp.x += offset; sp.y += offset;
+    s.isoSpecs.push(sp);
+  }
   for (const c of d.cycles || []) {
     c.id = nid(c.id); c.cfId = nid(c.cfId); c.nodes = c.nodes.map(nid);
     c.edges.forEach(e => { e.from = nid(e.from); e.to = nid(e.to); e.sa = nid(e.sa); e.sb = nid(e.sb); if (e.linkId) e.linkId = nid(e.linkId); });
@@ -581,5 +631,5 @@ function pasteData(data, offset) {
     s.cycles.push(c);
   }
   cleanupOrphans(s);
-  return [...d.pieces.map(p => p.id), ...d.groups.map(g => g.id), ...d.cfgs.map(c => c.id), ...(d.notes || []).map(n => n.id)];
+  return [...d.pieces.map(p => p.id), ...d.groups.map(g => g.id), ...d.cfgs.map(c => c.id), ...(d.notes || []).map(n => n.id), ...(d.isoRefs || []).map(r=>r.id), ...(d.isoSpecs || []).map(x=>x.id)];
 }

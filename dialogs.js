@@ -189,6 +189,14 @@ function noteDialog(at, id = null) {
   }});
 }
 
+function specDialog(id) {
+  const sp = (S().isoSpecs || []).find(x => x.id === id); if (!sp) return;
+  const body = el('<div class="spec-editor"></div>');
+  const redraw = () => { body.innerHTML = specEditorHTML(sp); wireSpecEditor(body, sp, redraw); };
+  redraw();
+  openModal({ title: 'Spécification — cadre de tolérance', body, wide: 560, noCancel: true, okText: 'Fermer', onOk: () => {} });
+}
+
 /* ===== Nouvelle pièce ===== */
 let lastPieceColor = '#fdb975';
 function pieceDialog(at) {
@@ -231,6 +239,41 @@ function pieceDialog(at) {
 let popupEl = null;
 function closePopup() { if (popupEl) { popupEl.remove(); popupEl = null; } }
 
+/* ===== Palette ISO GPS : outils Réf. ISO et Spécification, affichage des symboles ===== */
+function openIsoPopup() {
+  const anchor = $('#toolbar [data-act=isogps]');
+  const b = el(`<div class="popup iso-popup">
+    <div class="ttl"><b>ISO GPS</b><button class="xbtn" title="Fermer (Échap)">✕</button></div>
+    <button data-iso="ref">${ISO_REF_ICON} Réf. ISO</button>
+    <button data-iso="spec">${ISO_SPEC_ICON} Spécification</button>
+    <div class="muted">Affichage</div>
+    <button data-iso="isorefs"></button>
+    <button data-iso="isospecs"></button>
+    <div class="muted">Réf. ISO : clic sur une surface ou un groupe de références. Carré par défaut ; partielle, textes (⌀ pré-rempli) et extrémité dans le panneau de droite.<br>Spécification : cliquer sur une ou plusieurs surfaces / groupes de références, puis Entrée. Le cadre de tolérance se règle dans le panneau : symboles, indications, indicateurs Ⓜ Ⓔ…, références et extrémité de chaque lien (flèche ou trait simple).</div>
+  </div>`);
+  const sync = () => {
+    for (const [key, label, setting] of [['isorefs', 'Références', 'showIsoRefs'], ['isospecs', 'Spécifications', 'showSpecs']]) {
+      const btn = $(`[data-iso=${key}]`, b), on = doc.settings[setting] !== false;
+      btn.textContent = (on ? '👁 ' : '🚫 ') + label;
+      btn.classList.toggle('active', on); btn.setAttribute('aria-pressed', String(on));
+    }
+  };
+  $('.xbtn', b).onclick = closePopup;
+  $('[data-iso=ref]', b).onclick = () => setTool('isoRef');
+  $('[data-iso=spec]', b).onclick = () => setTool('spec');
+  $('[data-iso=isorefs]', b).onclick = () => { doc.settings.showIsoRefs = doc.settings.showIsoRefs === false; changed(false); sync(); };
+  $('[data-iso=isospecs]', b).onclick = () => { doc.settings.showSpecs = doc.settings.showSpecs === false; changed(false); sync(); };
+  sync();
+  document.body.appendChild(b);
+  if (anchor) {
+    const r = anchor.getBoundingClientRect();
+    b.style.left = Math.max(8, Math.min(window.innerWidth - b.offsetWidth - 8, r.left)) + 'px';
+    b.style.top = (r.bottom + 6) + 'px';
+  }
+  popupEl = b; b._keep = true;
+  return b;
+}
+
 /* ===== Paramètres ===== */
 function settingsDialog() {
   const st = clone(doc.settings);
@@ -272,7 +315,7 @@ function settingsDialog() {
   });
   draw();
   const reset = el(`<button>Valeurs par défaut</button>`);
-  reset.onclick = () => { Object.assign(st, clone(DEFAULT_SETTINGS), { showDetails: st.showDetails, showSurfaces: st.showSurfaces, grid: st.grid }); draw(); };
+  reset.onclick = () => { Object.assign(st, clone(DEFAULT_SETTINGS), { showDetails: st.showDetails, showSurfaces: st.showSurfaces, showIsoRefs: st.showIsoRefs, showSpecs: st.showSpecs, grid: st.grid }); draw(); };
   openModal({
     title: '⚙ Paramètres', body: b, extraLeft: reset, wide: 820,
     onOk: () => { st.surfaceTypes = st.surfaceTypes.filter(t => t.code); st.liaisonTypes = st.liaisonTypes.filter(t => t.code); checkpoint(); doc.settings = st; changed(); }
@@ -298,6 +341,8 @@ function helpDialog() {
       <li><b>Noms de groupes</b> : glisser le nom d'une répétition, d'un groupe fonctionnel ou d'une référence pour le déplacer. Le metaball s'étend pour l'inclure et le nom suit les membres. Double-clic ou « Position automatique du nom » pour réinitialiser. Dans un groupe fonctionnel réduit, le nom reste à l'intérieur de l'ellipse.</li>
       <li><b>Titres de répétition dans un groupe fonctionnel</b> : avec l'outil Fonctionnel ou « Modifier les membres », choisir les pièces, puis cliquer sur un titre de répétition visible pour l'inclure / le retirer. Le contour s'étend autour du titre, sans ajouter automatiquement les pièces de la répétition aux membres. Le choix est facultatif et conservé dans le JSON. Si la répétition est masquée dans un groupe réduit, son titre n'est pas dessiné.</li>
       <li>${k('N')} <b>Note</b> : choisir l’outil puis cliquer sur le graphe pour ajouter un commentaire. Les notes se déplacent avec Déplacer, se modifient par double-clic et sont conservées dans le JSON.</li>
+      <li><b>ISO GPS</b> : le bouton ouvre une boîte flottante avec les outils <b>Réf. ISO</b> et <b>Spécification</b>, et les bascules pour masquer / afficher leurs symboles (utile avant export). <b>Réf. ISO</b> : cliquer sur une surface ou un groupe de références. Le symbole est un cadre carré par défaut ; le panneau de droite permet de le passer en référence partielle (cercle coupé en deux, texte haut pré-rempli « ⌀ » et texte bas, avec italique possible), de choisir l’extrémité du rappel (triangle plein par défaut, ou flèche) et de modifier les textes. Le coude bleu ajuste le rappel à deux segments, qui se branche sur l’arête du symbole la plus proche. Les lettrages utilisent la police technique ISO 3098 (osifont).</li>
+      <li><b>Spécification</b> (${k('S')}) : cadre de tolérance ISO 1101. Cliquer sur une ou plusieurs surfaces / groupes de références pour choisir les cibles, puis ${k('Entrée')} crée le cadre. Chaque <b>compartiment</b> reçoit un symbole de caractéristique choisi dans une liste (droiture, planéité, position…), une indication libre (valeur, ⌀, lettre de référence…) et des indicateurs encerclés : Ⓜ maxi matière, Ⓔ gabarit / enveloppe, Ⓛ mini matière, Ⓣ tangence, Ⓕ état libre. Les compartiments se déplacent, se suppriment et s’ajoutent ; « Ajouter / retirer un lien » permet d’ajuster les cibles, et chaque lien se règle en <b>flèche, triangle plein ou trait simple</b>. Les poignées bleues déplacent le coude de chaque lien ; double-clic sur le cadre pour l’éditer dans une fenêtre.</li>
       <li><b>Nominal 0</b> : affiche / cache les bulles <i>n°pièce.0</i> reliées aux surfaces (contacts et CF). Glisser une bulle pour la déplacer à l'intérieur de sa pièce ; elle suit ensuite la pièce. Double-clic sur la bulle, ou bouton de réinitialisation dans le panneau de la pièce, pour revenir à la position initiale. La position reste conservée après enregistrement et copie. Les pièces masquées n'affichent pas de nominal.</li>
       <li>${k('C')} <b>CF</b> : clic sur deux pièces différentes → choisir un nom libre (texte, nombre ou vide) et les types des deux nouvelles surfaces. Le nom doit être unique dans la feuille, sans distinction de casse ou d'espaces extérieurs ; une seule CF sans nom est autorisée. Les anciens noms CF1, CF2… sont conservés à l'ouverture. Les surfaces sont propres à la CF ; supprimer la CF ou une de ses surfaces supprime les deux. L'option <b>Encadrer le libellé sur le trait</b> est disponible à la création et dans le panneau de la CF ; un nom vide n'affiche aucun texte ni cadre.</li>
       <li>Le panneau <b>CF</b> liste toutes les CF de la feuille : leur couleur est réglable et l'affichage peut être basculé individuellement ou toutes ensemble en <b>noir</b> ou dans leur <b>couleur enregistrée</b>. Le mode noir colore le lien, son libellé / cadre et ses surfaces propres, sans effacer les couleurs mémorisées. « Propriétés » ouvre les réglages détaillés.</li>

@@ -19,11 +19,12 @@ function renderProps() {
   else {
     target = obj(ids[0]);
     const k = kindOf(ids[0]);
-    html = k === 'piece' ? piecePanel(target) : k === 'surface' ? surfPanel(target) : k === 'liaison' ? linkPanel(target) : k === 'group' ? groupPanel(target) : k === 'cycle' ? cyclesPanel() : k === 'note' ? notePanel(target) : cfgPanel(target);
+    html = k === 'piece' ? piecePanel(target) : k === 'surface' ? surfPanel(target) : k === 'liaison' ? linkPanel(target) : k === 'group' ? groupPanel(target) : k === 'cycle' ? cyclesPanel() : k === 'note' ? notePanel(target) : k === 'isoRef' ? isoRefPanel(target) : k === 'isoSpec' ? isoSpecPanel(target) : cfgPanel(target);
   }
   box.innerHTML = html;
   if (target) $$('input[type=color][data-k]', box).forEach(i => i.value = rgbToHex(target[i.dataset.k]) || '#000000');
   wireProps(box, target);
+  if (target && kindOf(target.id) === 'isoSpec') wireSpecEditor(box, target, null);
 }
 
 function emptyPanel() {
@@ -45,6 +46,25 @@ function emptyPanel() {
     <h4>Licence</h4><div class="license-note"><b>PolyForm Noncommercial 1.0.0</b><br>Usage personnel et non commercial autorisé.<br><b>Usage commercial : autorisation écrite préalable obligatoire.</b></div>`;
 }
 function notePanel(n) { return `<h3>🗒 Note</h3><div class="row"><label>Texte</label></div><textarea data-k="text" rows="6" style="width:100%;resize:vertical">${esc(n.text)}</textarea>${fRow('Fond', fColor('color'))}<p class="muted">Glisser la note pour la déplacer ; double-clic pour la modifier.</p><div class="btns"><button data-pa="del" class="danger">🗑 Supprimer la note</button></div>`; }
+function isoRefPanel(r) {
+  const type = isoType(r), tip = ['triangle', 'arrow'].includes(r.tip) ? r.tip : ISO_STYLE.tipStyle;
+  return `<h3>${ISO_REF_ICON} Réf. ISO</h3>
+    ${fRow('Symbole', fSel('type', type, ISO_REFERENCE_TYPES))}
+    ${type === 'partial'
+      ? `${fRow('Texte haut', fText('text', r.text || '', 'vide'))}
+        ${fRow('Texte bas', fText('textBottom', r.textBottom || '', 'vide'))}
+        ${fRow('Italique haut', fCheck('italic', !!r.italic, 'Écrire en italique'))}
+        ${fRow('Italique bas', fCheck('italicBottom', !!r.italicBottom, 'Écrire en italique'))}`
+      : fRow('Identifiant', fText('text', r.text || 'A', 'A'))}
+    ${fRow('Extrémité du rappel', fSel('tip', tip, [['triangle', 'Triangle plein (équilatéral)'], ['arrow', 'Flèche']]))}
+    <p class="muted">Rappel à deux segments : glissez le coude bleu, le rappel se branche sur l’arête du symbole la plus proche. Pour la partielle, chaque demi-cercle a son texte et son italique (le texte bas peut rester vide).</p>
+    <div class="btns"><button data-pa="del" class="danger">🗑 Supprimer</button></div>`;
+}
+function isoSpecPanel(sp) {
+  return `<h3>${ISO_SPEC_ICON} Spécification</h3>` + specEditorHTML(sp) +
+    `<p class="muted">Glissez le cadre pour le déplacer ; les poignées bleues déplacent le coude de chaque lien. Chaque lien vise une surface ou un groupe de références, avec l’extrémité de votre choix (flèche, triangle plein ou trait simple). Double-clic sur le cadre pour l’éditer dans une fenêtre.</p>
+    <div class="btns"><button data-pa="del" class="danger">🗑 Supprimer</button></div>`;
+}
 function piecePanel(p) {
   const surfs = S().surfaces.filter(s => s.pieceId === p.id);
   return `<h3><span class="chip" style="background:${p.color};color:${textOn(p.color)}">◯</span> Pièce</h3>
@@ -146,6 +166,12 @@ function applyField(target, inp) {
   }
   else v = inp.value;
   const kd = kindOf(target.id);
+  if (kd === 'isoRef' && k === 'type') {
+    target.type = v;
+    if (v === 'partial' && (target.text === 'A' || !target.text)) target.text = '⌀';
+    else if (v === 'element' && target.text === '⌀') target.text = 'A';
+    const elbow = isoDefaultElbow(target); target.elbowX = elbow.x; target.elbowY = elbow.y; return true;
+  }
   if ((kd === 'liaison' || kd === 'cfg') && k === 'curved') { target.curved = v; target.bend = v ? (target.bend || 80) : 0; return true; }
   if (kd === 'cfg' && k === 'name') {
     v = v.trim();

@@ -20,6 +20,18 @@ input.invalid { border-color: #d00; background: #fff3f3; }
 #toolbar { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 8px; background: #fff; border-bottom: 1px solid #d7dbe3; align-items: center; z-index: 5; }
 .tb-group { display: flex; gap: 3px; align-items: center; padding-right: 6px; border-right: 1px solid #e3e6ec; }
 .tb-group:last-child { border-right: none; }
+.toolbar-label { font-size: 11px; font-weight: 700; color: #596273; white-space: nowrap; padding: 0 3px; }
+/* Éditeur des cadres de tolérance (spécifications ISO GPS) */
+.spec-preview svg { display: block; width: 100%; max-width: 260px; height: auto; margin: 2px 0 6px; }
+.spec-cell { border: 1px solid #e1e4eb; border-radius: 8px; padding: 6px 8px; margin: 6px 0; background: #fafbfd; }
+.spec-cell-row { display: flex; gap: 5px; }
+.spec-cell-row select, .spec-cell-row input { flex: 1; min-width: 0; }
+.spec-mods { display: flex; flex-wrap: wrap; gap: 3px; align-items: center; margin-top: 5px; }
+.spec-mods button { padding: 2px 6px; font-size: 13px; }
+.spec-cell-acts { margin-left: auto; display: inline-flex; gap: 3px; }
+.spec-target { display: flex; align-items: center; gap: 5px; margin: 4px 0; }
+.spec-target select { flex: 1; min-width: 0; }
+.spec-editor .btns { margin-top: 6px; }
 .brand { font-weight: 700; color: #2b5fd9; margin-right: 4px; }
 .tool-icon { width: 20px; height: 20px; vertical-align: middle; pointer-events: none; }
 #zoomLbl { min-width: 42px; text-align: center; color: #555; }
@@ -30,7 +42,7 @@ main { flex: 1; display: flex; min-height: 0; }
 #svg { width: 100%; height: 100%; display: block; touch-action: none; user-select: none; }
 #stage.t-select #svg { cursor: grab; }
 #stage.t-select [data-kind=piece], #stage.t-select [data-kind=surface], #stage.t-select [data-kind=group], #stage.t-select [data-kind=nominal] { cursor: move; }
-#stage.t-piece #svg, #stage.t-liaison #svg, #stage.t-cfg #svg, #stage.t-note #svg { cursor: crosshair; }
+#stage.t-piece #svg, #stage.t-liaison #svg, #stage.t-cfg #svg, #stage.t-note #svg, #stage.t-isoRef #svg, #stage.t-spec #svg { cursor: crosshair; }
 #stage.t-rep #svg, #stage.t-fonc #svg, #stage.t-ref #svg, #stage.t-cycle #svg { cursor: pointer; }
 #stage.t-pipette #svg, #stage.t-paint #svg { cursor: cell; }
 #stage.panning #svg, #stage.panning #svg * { cursor: grabbing !important; }
@@ -137,11 +149,29 @@ main { flex: 1; display: flex; min-height: 0; }
 .vector-editor select { max-width: 130px; }
 .vector-editor input { width: 92px; }
 
+/* Police technique ISO 3098 — osifont (LGPL3 + exception de police, voir fonts/LICENSE) */
+@font-face {
+  font-family: 'osifont';
+  src: url('fonts/osifont.woff') format('woff');
+  font-weight: normal; font-style: normal; font-display: block;
+}
+@font-face {
+  font-family: 'osifont';
+  src: url('fonts/osifont-italic.woff') format('woff');
+  font-weight: normal; font-style: italic; font-display: block;
+}
+
 /* quick surface popup */
 .popup { position: fixed; z-index: 40; background: #fff; border: 1px solid #c9ced8; border-radius: 10px; box-shadow: 0 6px 24px #0003; padding: 8px; max-width: 260px; }
 .popup .ttl { font-weight: 600; margin-bottom: 6px; }
 .popup .chips { display: flex; flex-wrap: wrap; gap: 4px; }
 .popup .chips button { font-weight: 600; min-width: 42px; }
+
+/* palette ISO GPS */
+.iso-popup { display: flex; flex-direction: column; gap: 6px; width: 195px; }
+.iso-popup .ttl { display: flex; justify-content: space-between; align-items: center; }
+.iso-popup .ttl .xbtn { border: none; background: none; cursor: pointer; font-size: 13px; padding: 0 2px; }
+.iso-popup .muted { margin-top: 2px; font-size: 12px; }
 
 table.set { border-collapse: collapse; width: 100%; }
 table.set td, table.set th { padding: 3px 4px; border-bottom: 1px solid #eceef2; text-align: left; }
