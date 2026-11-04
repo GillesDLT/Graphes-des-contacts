@@ -196,7 +196,7 @@ function liaisonDialog(pidA, pidB, editId) {
         SF(sa).count = c.countA; SF(sb).count = c.countB;
         const details = {}; ltype(c.type).fields.forEach(f => details[f] = c.details[f] || '');
         if (c.editId && L(c.editId)) { const l = L(c.editId); Object.assign(l, { a: sa, b: sb, type: c.type, count: c.count, details }); last = l; }
-        else last = createLiaison(sa, sb, c.type, c.count, details);
+        else { last = createLiaison(sa, sb, c.type, c.count, details); }
       }
       cleanupOrphans();
       setTool('select'); sel.clear(); if (last) sel.add(last.id);

@@ -33,7 +33,7 @@ function commitGroup() {
     if (tool === 'fonc') g.repLabelIds = pickRepLabels.slice();
   }
   else g = createGroup(tool, pick.slice(), pickCFs, pickRepLabels);
-  cleanupCycles();
+  cleanupOrphans();
   setTool('select'); sel.clear(); sel.add(g.id); changed();
 }
 function togglePick(id) {
@@ -43,12 +43,12 @@ function togglePick(id) {
 }
 /* ===== Outil Spécification (cadre de tolérance) ===== */
 function commitSpec() {
-  if (tool !== 'spec' || !pick.length) return;
+  if (tool !== 'spec' || !pick.length) return toast('Choisissez au moins une surface ou un groupe de surfaces.');
   const ids = pick.slice(); pick = [];
   const sp = createSpec(ids);
-  if (!sp) return toast('Aucune cible valide.');
+  if (!sp) return toast('Les composants sélectionnés doivent appartenir à la même pièce.');
   setTool('select'); sel.clear(); sel.add(sp.id); changed();
-  toast('Spécification créée — symboles, indications, indicateurs et liens dans le panneau de droite.');
+  toast('Spécification créée — sections, indications adjacentes et indication complémentaire dans le panneau de droite.');
 }
 function endSpecEdit() {
   const id = editSpecId;
@@ -203,30 +203,36 @@ svg.addEventListener('pointerdown', e => {
     return;
   }
   if (tool === 'isoRef') {
-    if (h?.kind === 'surface') createIsoReference('surface',h.id);
-    else if (h?.kind === 'group' && G(h.id)?.kind === 'ref') createIsoReference('group',h.id);
-    else toast('Cliquez sur une surface ou sur un groupe de références.');
+    const target = isoComponentFromHit(h);
+    if (!target) return toast('Cliquez sur une surface ou un groupe de surfaces de référence.');
+    if (!isoTargetOwner(target)) return toast('Le groupe doit contenir uniquement des surfaces d’une même pièce.');
+    createIsoReference(target.targetKind, target.targetId);
     return;
   }
   if (tool === 'spec') {
-    const isTarget = h && (h.kind === 'surface' || ((h.kind === 'group' || h.kind === 'glabel') && G(h.id)?.kind === 'ref'));
-    if (!isTarget) return toast('Cliquez sur une surface ou sur un groupe de références.');
+    const target = isoComponentFromHit(h);
+    if (!target) return toast('Cliquez sur une surface ou un groupe de surfaces.');
+    const owner = isoTargetOwner(target);
+    if (!owner) return toast('Le groupe doit contenir uniquement des surfaces d’une même pièce.');
     if (editSpecId) {
       const sp = (S().isoSpecs || []).find(x => x.id === editSpecId);
       if (!sp) { setTool('select'); return; }
-      const kind = SF(h.id) ? 'surface' : 'group';
+      if (owner !== sp.ownerPieceId) return toast('Une spécification ne peut viser que des composants de sa pièce.');
+      const index = (sp.targets || []).findIndex(t => t.targetKind === target.targetKind && t.targetId === target.targetId);
+      if (index >= 0 && sp.targets.length === 1) return toast('La spécification doit rester liée à au moins un composant.');
       checkpoint();
-      const i = sp.targets.findIndex(t => t.targetId === h.id);
-      if (i >= 0) sp.targets.splice(i, 1);
+      if (index >= 0) sp.targets.splice(index, 1);
       else {
-        const target = { targetKind: kind, targetId: h.id, tip: 'arrow' };
-        const de = specDefaultElbow(sp, target);
-        target.elbowX = de.x; target.elbowY = de.y;
-        sp.targets.push(target);
+        const linked = { ...target, tip: 'arrow' };
+        const elbow = specDefaultElbow(sp, linked);
+        linked.elbowX = elbow.x; linked.elbowY = elbow.y;
+        sp.targets.push(linked);
       }
       changed(); updateTip(); return;
     }
-    togglePick(h.id); render(); updateTip(); return;
+    const first = pick.length ? isoComponentFromId(pick[0]) : null;
+    if (first && isoTargetOwner(first) !== owner) return toast('Tous les composants d’une spécification doivent appartenir à la même pièce.');
+    togglePick(target.targetId); render(); updateTip(); return;
   }
   if (tool === 'cycle') {
     if (h && (h.kind === 'surface' || (['group', 'glabel'].includes(h.kind) && G(h.id)?.kind === 'ref'))) pickCycleNode(h.id, e.ctrlKey || e.metaKey);
@@ -357,11 +363,16 @@ function startMove(pt) {
     if (k === 'group') { const g = G(id); if (g.kind !== 'ref') g.members.forEach(m => mp.add(m)); }
   }
   const surfs = [...sel].map(SF).filter(x => x && !mp.has(x.pieceId));
+  const attached = [
+    ...(S().isoRefs || []).filter(x => mp.has(x.ownerPieceId || (x.targetKind === 'piece' ? x.targetId : ''))).map(o => ({ kind: 'isoRef', o, x: o.x, y: o.y, ex: o.elbowX, ey: o.elbowY })),
+    ...(S().isoSpecs || []).filter(x => mp.has(x.ownerPieceId || (x.targets || []).find(t => t.targetKind === 'piece')?.targetId)).map(o => ({ kind: 'isoSpec', o, x: o.x, y: o.y, elbows: (o.targets || []).map(t => [t.elbowX, t.elbowY]) }))
+  ];
   drag = {
     type: 'move', start: pt, snap: snapshot(), moved: false,
     pieces: [...mp].map(P).filter(Boolean).map(p => [p, p.x, p.y]),
     surfs: surfs.map(x => [x, x.dx, x.dy]),
-    notes: [...sel].map(id => (S().notes || []).find(n => n.id === id)).filter(Boolean).map(n => [n, n.x, n.y])
+    notes: [...sel].map(id => (S().notes || []).find(n => n.id === id)).filter(Boolean).map(n => [n, n.x, n.y]),
+    attached
   };
 }
 
@@ -411,6 +422,16 @@ svg.addEventListener('pointermove', e => {
     drag.pieces.forEach(([p, x, y]) => { p.x = x + dx; p.y = y + dy; });
     drag.surfs.forEach(([s, x, y]) => { const p = P(s.pieceId); s.pinned = true; s.ang = angleOnPiece(p, p.x + x + dx, p.y + y + dy); });
     drag.notes.forEach(([n, x, y]) => { n.x = x + dx; n.y = y + dy; });
+    drag.attached.forEach(gps => {
+      gps.o.x = gps.x + dx; gps.o.y = gps.y + dy;
+      if (gps.kind === 'isoRef') {
+        if (Number.isFinite(gps.ex)) gps.o.elbowX = gps.ex + dx;
+        if (Number.isFinite(gps.ey)) gps.o.elbowY = gps.ey + dy;
+      } else (gps.o.targets || []).forEach((t, i) => {
+        if (Number.isFinite(gps.elbows[i]?.[0])) t.elbowX = gps.elbows[i][0] + dx;
+        if (Number.isFinite(gps.elbows[i]?.[1])) t.elbowY = gps.elbows[i][1] + dy;
+      });
+    });
     render(); return;
   }
   if (drag.type === 'resize' || drag.type === 'resizeGroup') {
@@ -543,7 +564,22 @@ document.addEventListener('keydown', e => {
   if (e.key.startsWith('Arrow') && sel.size) {
     e.preventDefault(); const st = e.shiftKey ? 10 : 1;
     const dx = e.key === 'ArrowLeft' ? -st : e.key === 'ArrowRight' ? st : 0, dy = e.key === 'ArrowUp' ? -st : e.key === 'ArrowDown' ? st : 0;
-    checkpoint(); [...sel].map(P).filter(Boolean).forEach(p => { p.x += dx; p.y += dy; }); changed(false); return;
+    checkpoint();
+    const movedPieces = new Set([...sel].map(P).filter(Boolean).map(p => p.id));
+    [...movedPieces].map(P).filter(Boolean).forEach(p => { p.x += dx; p.y += dy; });
+    (S().isoRefs || []).filter(ref => movedPieces.has(ref.ownerPieceId)).forEach(ref => {
+      ref.x += dx; ref.y += dy;
+      if (Number.isFinite(ref.elbowX)) ref.elbowX += dx;
+      if (Number.isFinite(ref.elbowY)) ref.elbowY += dy;
+    });
+    (S().isoSpecs || []).filter(spec => movedPieces.has(spec.ownerPieceId)).forEach(spec => {
+      spec.x += dx; spec.y += dy;
+      (spec.targets || []).forEach(target => {
+        if (Number.isFinite(target.elbowX)) target.elbowX += dx;
+        if (Number.isFinite(target.elbowY)) target.elbowY += dy;
+      });
+    });
+    changed(false); return;
   }
   if (TOOL_KEYS[k]) {
     if (k === 'l') { const ps = [...sel].filter(id => kindOf(id) === 'piece'); if (ps.length === 2) return liaisonDialog(ps[0], ps[1]); setTool('liaison'); return; }
@@ -649,7 +685,7 @@ function isoFontStyle() {
 function download(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); }
 const fileBase = () => S().name.replace(/[^\w\-À-ÿ ]+/g, '_').trim() || 'graphe';
 function saveJSON() { exportFileDialog({ title: 'Enregistrer le graphe JSON', extension: '.json', mime: 'application/json', makeBlob: () => new Blob([JSON.stringify(doc, null, 1)], { type: 'application/json' }) }); }
-function buildExportSVG() {
+function buildExportSVG({ transparentBackground = false } = {}) {
   if (!S().pieces.length && !(S().notes || []).length && !(S().isoRefs || []).length && !(S().isoSpecs || []).length) { toast('Graphe vide'); return null; }
   const box = $('#content').getBBox(), bb = { x0: box.x, y0: box.y, x1: box.x + box.width, y1: box.y + box.height };
   const m = 40, x = bb.x0 - m, y = bb.y0 - m, w = bb.x1 - bb.x0 + 2 * m, h = bb.y1 - bb.y0 + 2 * m;
@@ -665,11 +701,11 @@ function buildExportSVG() {
     t.setAttributeNS('http://www.w3.org/XML/1998/namespace', 'xml:space', 'preserve');
   });
   const inner = new XMLSerializer().serializeToString(exported);
-  return { w, h, str: `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${r1(w)}" height="${r1(h)}" viewBox="${r1(x)} ${r1(y)} ${r1(w)} ${r1(h)}" font-family="Arial, Liberation Sans, sans-serif" shape-rendering="geometricPrecision" text-rendering="geometricPrecision"><title>${esc(S().name)} — Graphe des contacts</title><desc>Graphe vectoriel comprenant pièces, surfaces, liaisons, groupes et notes.</desc>${isoFontStyle()}<rect x="${r1(x)}" y="${r1(y)}" width="${r1(w)}" height="${r1(h)}" fill="#ffffff"/>${inner}</svg>` };
+  return { w, h, str: `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${r1(w)}" height="${r1(h)}" viewBox="${r1(x)} ${r1(y)} ${r1(w)} ${r1(h)}" font-family="Arial, Liberation Sans, sans-serif" shape-rendering="geometricPrecision" text-rendering="geometricPrecision"><title>${esc(S().name)} — Graphe des contacts</title><desc>Graphe vectoriel comprenant pièces, surfaces, liaisons, groupes et notes.</desc>${isoFontStyle()}${transparentBackground ? '' : `<rect x="${r1(x)}" y="${r1(y)}" width="${r1(w)}" height="${r1(h)}" fill="#ffffff"/>`}${inner}</svg>` };
 }
 function exportSVG() { exportFileDialog({ title: 'Exporter en SVG vectoriel', extension: '.svg', mime: 'image/svg+xml', makeBlob: () => { const s = buildExportSVG(); return s ? new Blob([s.str], { type: 'image/svg+xml;charset=utf-8' }) : null; } }); }
 function renderPNG(scale = 3) {
-  const s = buildExportSVG(); if (!s) return Promise.resolve(null);
+  const s = buildExportSVG({ transparentBackground: true }); if (!s) return Promise.resolve(null);
   return new Promise(res => {
     const img = new Image();
     img.onload = () => {

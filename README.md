@@ -129,7 +129,7 @@ Le numéro de pièce sert à nommer automatiquement les surfaces. Par exemple,
 `CY.1.1` désigne une surface cylindrique de la pièce 1. Il n’est pas affiché
 séparément sous le nom de la pièce.
 
-Le bouton **?** ouvre une aide plus détaillée dans l’application.
+Le bouton **?** ouvre une aide plus détaillée dans l’application. Les spécifications ISO GPS peuvent recevoir des indications adjacentes non encadrées en haut à gauche du cadre ; une répétition de 1 n’affiche pas « 1x ».
 
 ## Groupes, CF et cycles
 
@@ -191,23 +191,25 @@ dans le panneau.
 Le bouton **ISO GPS** ouvre une boîte flottante avec deux outils et les bascules
 pour masquer / afficher leurs symboles (utile avant export).
 
-- **Réf. ISO** : cliquer sur une surface ou un groupe de références pour poser
-  un indicateur (cadre carré par défaut, ou référence partielle en cercle coupé
-  en deux). Le rappel à deux segments se règle avec son coude bleu et se termine
-  par un triangle plein ou une flèche.
-- **Spécification** : cliquer sur une ou plusieurs surfaces / groupes de
-  références, puis **Entrée** crée un **cadre de tolérance**. Chaque compartiment
-  reçoit un symbole de caractéristique choisi dans une liste (droiture, planéité,
-  circularité, cylindricité, profils, perpendicularité, angulosité, parallélisme,
-  position, coaxialité, symétrie, battements…), une indication libre (valeur,
-  ⌀, lettre de référence…) et des indicateurs encerclés : **Ⓜ** condition de
-  plus grande matière (maxi matière), **Ⓔ** principe d’enveloppe (gabarit), **Ⓛ**
-  condition de plus petite matière, **Ⓣ** tangence, **Ⓕ** état libre.
+- **Réf. ISO** : cliquer sur une surface ou un groupe de surfaces pour y poser
+  un indicateur (élément de référence carré ou référence partielle). Les surfaces
+  / groupes visés doivent appartenir à une seule pièce ; l’indicateur suit cette
+  pièce quand elle est déplacée.
+- **Spécification** : cliquer sur une ou plusieurs surfaces ou groupes de
+  surfaces appartenant à la même pièce, puis **Entrée** crée le **cadre de
+  tolérance**. Les composants d’une autre pièce sont refusés et la spécification
+  se déplace avec sa pièce. Chaque section reçoit un symbole de caractéristique,
+  une indication libre et des modificateurs encerclés (**Ⓜ**, **Ⓔ**, **Ⓛ**, **Ⓣ**,
+  **Ⓕ**).
 
-Les compartiments se déplacent, se suppriment et s’ajoutent. Le bouton
-« Ajouter / retirer un lien » permet d’ajuster les cibles et **chaque lien se
-régle en flèche, triangle plein ou trait simple**. Les poignées bleues déplacent
-le coude de chaque lien ; le double-clic sur le cadre ouvre la fenêtre d’édition.
+Les indications adjacentes non encadrées se placent en haut à gauche du cadre :
+répétition (sans « 1x » si elle vaut 1), symbole de diamètre, valeur, indicateur
+encerclé et symbole supplémentaire. Après les sections, la partie « Indication
+complémentaire » propose les quatre types d’indicateurs ; leurs symboles graphiques
+seront ajustés à partir de la référence fournie. Les liens vers les composants se
+règlent en flèche, triangle plein ou trait simple. Les quatre types d’indication
+complémentaire sont présents dans l’éditeur ; leurs symboles graphiques seront
+finalisés à partir de la référence fournie.
 Les lettrages utilisent la police technique ISO 3098 (osifont), y compris dans
 les exports.
 
@@ -254,7 +256,7 @@ Le bouton **PDF** ouvre l’aperçu d’impression du navigateur. Choisir **Enre
 
 ### PNG / SVG : pour un compte rendu
 
-- **PNG** : une image à insérer dans un rapport ou une présentation.
+- **PNG** : une image à fond blanc à insérer dans un rapport ou une présentation.
 - **SVG** : une image vectorielle, qui reste nette lorsqu’elle est agrandie.
 - **PowerPoint (PPTX)** : exporte les pièces, surfaces, liaisons, libellés, groupes et notes en formes/textes PowerPoint modifiables. Chaque pièce est un sous-groupe PowerPoint contenant son ellipse, son nom et ses surfaces, que l’on peut sélectionner ou déplacer ensemble. Les traits de liaison entre surfaces et leurs libellés restent des objets PowerPoint séparés et éditables. Les courbes sont converties en une suite de petits traits éditables et les contours de groupes deviennent des ellipses d’enveloppe.
 - **Image** : copier le rendu dans le presse-papier, si le navigateur l’autorise.

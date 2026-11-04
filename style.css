@@ -31,6 +31,9 @@ input.invalid { border-color: #d00; background: #fff3f3; }
 .spec-cell-acts { margin-left: auto; display: inline-flex; gap: 3px; }
 .spec-target { display: flex; align-items: center; gap: 5px; margin: 4px 0; }
 .spec-target select { flex: 1; min-width: 0; }
+.spec-complementary { display: flex; flex-direction: column; align-items: stretch; gap: 4px; }
+.spec-complementary button { text-align: left; }
+.spec-complementary button.active { background: #e8efff; border-color: #2b5fd9; color: #173f9b; }
 .spec-editor .btns { margin-top: 6px; }
 .brand { font-weight: 700; color: #2b5fd9; margin-right: 4px; }
 .tool-icon { width: 20px; height: 20px; vertical-align: middle; pointer-events: none; }
@@ -176,3 +179,13 @@ main { flex: 1; display: flex; min-height: 0; }
 table.set { border-collapse: collapse; width: 100%; }
 table.set td, table.set th { padding: 3px 4px; border-bottom: 1px solid #eceef2; text-align: left; }
 table.set input[type=text] { width: 100%; }
+.spec-ann-fields { display: flex; flex-direction: column; gap: 5px; margin: 6px 0 10px; }
+.spec-ann-fields label { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 6px; align-items: center; }
+.spec-comp-fields { margin-top: 6px; }
+.spec-comp-field { border: 1px solid #e1e4eb; border-radius: 7px; padding: 6px; margin: 5px 0; background: #fafbfd; }
+.spec-comp-field b { display: block; margin-bottom: 5px; font-size: 12px; }
+.corner-mark-buttons { display: inline-flex; gap: 3px; }
+.corner-mark-buttons button { min-width: 34px; padding: 3px 6px; }
+.spec-target { flex-wrap: wrap; }
+.spec-target > button:first-child { flex: 1 1 100%; text-align: left; }
+.spec-target .corner-mark-buttons { margin-left: auto; }

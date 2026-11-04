@@ -128,7 +128,8 @@ function linkLineSVG(l) {
 function linkLabelSVG(l) {
   const g = linkGeom(l); if (!g) return '';
   const { x, y } = g.point(l.t ?? 0.5);
-  return richTextSVG(liaisonLabel(l), x, y + 4, 12, `data-id="${l.id}" data-kind="llabel"`, cycleMarks.colors.links.get(l.id) || '#1f1f1f');
+  const color = cycleMarks.colors.links.get(l.id) || '#1f1f1f';
+  return richTextSVG(liaisonLabel(l), x, y + 4, 12, `data-id="${l.id}" data-kind="llabel"`, color);
 }
 /* Groupe fonctionnel réduit : une seule ellipse portant les surfaces en contact avec l'extérieur */
 function collapsedSVG(g) {
@@ -391,8 +392,8 @@ function renderPickbar() {
   if (tool === 'spec') {
     const sp = editSpecId && (S().isoSpecs || []).find(x => x.id === editSpecId);
     const html = sp
-      ? `<span><b>Spécification</b> : <span class="cnt">${sp.targets.length} lien(s)</span> — <b>clic</b> sur une surface ou un groupe de références pour ajouter / retirer un lien</span><button class="primary" data-pb="ok">✔ Terminer <span class="kbd" style="color:#333">Entrée</span></button><button data-pb="cancel">Fermer</button>`
-      : `<span><b>Spécification</b> : <span class="cnt">${pick.length} cible(s)</span> — surfaces et groupes de références</span><button class="primary" data-pb="ok" ${pick.length ? '' : 'disabled'}>✔ Créer le cadre <span class="kbd" style="color:#333">Entrée</span></button><button data-pb="cancel">Annuler</button><span id="pickErr" class="err" role="alert"></span>`;
+      ? `<span><b>Spécification</b> : ${sp.targets.length} composant(s) lié(s) à <span class="cnt">${esc(specTargetLabel(sp.targets[0] || {}))}</span> — clic pour ajouter / retirer un composant de la même pièce</span><button class="primary" data-pb="ok">✔ Terminer <span class="kbd" style="color:#333">Entrée</span></button><button data-pb="cancel">Fermer</button>`
+      : `<span><b>Spécification</b> : <span class="cnt">${pick.length} composant(s)</span> — surfaces et groupes d’une seule pièce</span><button class="primary" data-pb="ok" ${pick.length ? '' : 'disabled'}>✔ Créer le cadre <span class="kbd" style="color:#333">Entrée</span></button><button data-pb="cancel">Annuler</button><span id="pickErr" class="err" role="alert"></span>`;
     if (pb.dataset.h !== html) { pb.innerHTML = html; pb.dataset.h = html; }
     pb.classList.add('show');
     return;
@@ -425,13 +426,13 @@ const TIPS = {
   pipette: '<b>Clic</b> sur un élément pour prélever sa couleur',
   paint: '<b>Clic</b> sur un élément pour lui appliquer la couleur courante',
   note: '<b>Clic</b> sur le graphe pour ajouter une note. Elle se déplace ensuite avec l’outil Déplacer — <b>N</b>',
-  spec: '<b>Clic</b> sur une ou plusieurs surfaces / groupes de références pour choisir les cibles, puis <b>Entrée</b> : le cadre de tolérance se règle ensuite dans le panneau de droite (symboles, indications, indicateurs, références, extrémités des liens)',
-  isoRef: '<b>Clic</b> sur une surface ou un groupe de références pour ajouter une référence ISO (cadre carré par défaut). Le panneau permet de la passer en référence partielle (cercle coupé en deux), de choisir les textes, leurs italiques et l’extrémité du rappel.'
+  spec: '<b>Clic</b> sur une surface ou un groupe de surface pour choisir les composants d’une seule pièce, puis <b>Entrée</b>. La spécification est liée à ces composants et suit la pièce. Les sections et indications se règlent dans le panneau de droite.',
+  isoRef: '<b>Clic</b> sur une surface ou un groupe de surfaces d’une seule pièce pour y appliquer un indicateur ISO.'
 };
 function showTip(html) { const t = $('#tip'); t.innerHTML = html || ''; t.classList.toggle('show', !!html); }
 function updateTip() {
-  if (tool === 'spec' && editSpecId) return showTip('<b>Modification des liens</b> : <b>clic</b> sur une surface ou un groupe de références pour ajouter / retirer un lien — <b>Entrée</b> pour terminer');
-  if (tool === 'spec' && pick.length) return showTip(`<b>${pick.length} cible(s)</b> sélectionnée(s) — <b>clic</b> pour ajouter / retirer, <b>Entrée</b> pour créer le cadre de tolérance`);
+  if (tool === 'spec' && editSpecId) return showTip('<b>Composants liés</b> : clic sur une surface ou un groupe de la même pièce pour l’ajouter / le retirer — <b>Entrée</b> pour terminer');
+  if (tool === 'spec' && pick.length) return showTip(`<b>${pick.length} composant(s) sélectionné(s)</b> — tous doivent appartenir à la même pièce — <b>Entrée</b> pour créer la spécification`);
   if (tool === 'liaison' && pick.length === 1) return showTip(`1<sup>re</sup> pièce : <b>${esc(P(pick[0])?.name)}</b> — <b>Ctrl + clic</b> sur la 2<sup>e</sup> pièce`);
   if (tool === 'cfg' && pick.length === 1) return showTip(`1<sup>re</sup> pièce : <b>${esc(endName(pick[0]))}</b> — clic sur une autre pièce`);
   if (tool === 'cycle' && cycleDraft) return showTip(`<b>${esc(cfDisplayName(C(cycleDraft.cfId)))}</b> : ${cycleDraft.nodes.length} nœud(s) — <b>Clic ou Ctrl+clic</b> sur un contact / une référence — <b>Ctrl+clic sur la dernière étape</b> ou <b>Retour arrière</b> : retirer`);

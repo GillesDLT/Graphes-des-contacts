@@ -6,7 +6,7 @@
    Unités en pixels ; 4 px ≈ 1 mm (lettre h = 14 px ≈ 3,5 mm).
    Proportions ISO 129-1 / ISO 1101 / ISO 5459 :
    - h = hauteur de lettre (hauteur des capitales, série ISO 3098)
-   - cadre de hauteur 2h, compartiment carré 2h × 2h
+   - cadre de hauteur 2h, section carrée 2h × 2h
    - rappel à deux segments en trait mince (≈ 0,3 mm)
    - extrémité : triangle équilatéral plein posé par sa base sur la
      surface (symbole de base ISO 5459), ou flèche pleine
@@ -42,8 +42,8 @@ const ISO_REF_ICON = `<svg class="tool-icon iso-icon" viewBox="0 0 24 24" aria-h
 const ISO_SPEC_ICON = `<svg class="tool-icon iso-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="2" y="3" width="14" height="8" fill="none" stroke="currentColor" stroke-width="1.6"/><line x1="7" y1="3" x2="7" y2="11" stroke="currentColor" stroke-width="1.2"/><line x1="12" y1="3" x2="12" y2="11" stroke="currentColor" stroke-width="1.2"/><line x1="9" y1="11" x2="16" y2="19" stroke="currentColor" stroke-width="1.4"/><polygon points="16.5,18.2 21,20.5 15.2,21.6" fill="currentColor"/></svg>`;
 
 const ISO_REFERENCE_TYPES = [
-  ['element', 'Carré (indicateur d’élément de référence)'],
-  ['partial', 'Partielle (cercle coupé en deux)']
+  ['element', 'Élément de référence (cadre carré)'],
+  ['partial', 'Référence partielle (cercle coupé en deux)']
 ];
 const ISO_REFERENCE_TYPE_IDS = new Set(ISO_REFERENCE_TYPES.map(([id]) => id));
 /* Anciens symboles (avant réduction à carré / partielle) : convertis à l'affichage. */
@@ -58,7 +58,7 @@ function isoType(ref) {
   return ISO_LEGACY_TYPES[ref.type] || (ref.partial ? 'partial' : 'element');
 }
 function isoTypeHasLeader(type) {
-  return type === 'element' || type === 'partial';
+  return ISO_REFERENCE_TYPE_IDS.has(type);
 }
 /* Métriques dérivées des réglages : hauteur de lettre, taille de police. */
 function isoMetrics() {
@@ -67,12 +67,37 @@ function isoMetrics() {
   return { s, letter, fontPx, font: `${r1(fontPx)}px ${ISO_FONT}` };
 }
 function isoTargetCenter(ref) {
+  if (ref.targetKind === 'piece') { const p = P(ref.targetId); return p ? { x: p.x, y: p.y } : null; }
   if (ref.targetKind === 'surface') {
     const s = SF(ref.targetId); return s ? spos(s) : null;
   }
   const g = G(ref.targetId), pts = g ? groupPoints(g) : [];
   if (!pts.length) return null;
   const b = bboxPts(pts); return { x: (b.x0 + b.x1) / 2, y: (b.y0 + b.y1) / 2 };
+}
+function isoTargetOwner(target) {
+  if (!target) return null;
+  if (target.targetKind === 'piece') return P(target.targetId) ? target.targetId : null;
+  if (target.targetKind === 'surface') return SF(target.targetId)?.pieceId || null;
+  if (target.targetKind === 'group') {
+    const group = G(target.targetId);
+    if (!group || group.kind !== 'ref') return null;
+    const members = group.members || [];
+    if (!members.length || members.some(id => !SF(id))) return null;
+    const owners = new Set(members.map(id => SF(id).pieceId));
+    return owners.size === 1 ? [...owners][0] : null;
+  }
+  return null;
+}
+function isoComponentFromId(id) {
+  if (SF(id)) return { targetKind: 'surface', targetId: id };
+  const group = G(id);
+  return group?.kind === 'ref' ? { targetKind: 'group', targetId: id } : null;
+}
+function isoComponentFromHit(hit) {
+  if (hit?.kind === 'surface') return isoComponentFromId(hit.id);
+  if (['group', 'glabel'].includes(hit?.kind) && G(hit.id)?.kind === 'ref') return isoComponentFromId(hit.id);
+  return null;
 }
 function isoInsideLoops(point, loops) {
   for (const loop of loops || []) {
@@ -86,6 +111,10 @@ function isoInsideLoops(point, loops) {
   return false;
 }
 function isoTargetShape(ref) {
+  if (ref.targetKind === 'piece') {
+    const p = P(ref.targetId);
+    return p ? { center: { x: p.x, y: p.y }, radius: 0, rx: p.rx, ry: p.ry, loops: [], bounds: { x0: p.x - p.rx, y0: p.y - p.ry, x1: p.x + p.rx, y1: p.y + p.ry } } : null;
+  }
   if (ref.targetKind === 'surface') {
     const s = SF(ref.targetId), c = s && spos(s);
     return s && c ? { center: c, radius: Math.max(1, s.r + (s.sw || 1.5)/2), loops: [], bounds: null } : null;
@@ -124,6 +153,11 @@ function isoTargetBoundary(ref, toward) {
   const shape = isoTargetShape(ref); if (!shape) return null;
   const dx = toward.x - shape.center.x, dy = toward.y - shape.center.y;
   const len = Math.hypot(dx, dy) || 1, direction = { x: dx / len, y: dy / len };
+  if (shape.rx > 0 && shape.ry > 0) {
+    const denom = Math.sqrt((direction.x / shape.rx) ** 2 + (direction.y / shape.ry) ** 2) || 1;
+    const distance = 1 / denom;
+    return { x: shape.center.x + direction.x * distance, y: shape.center.y + direction.y * distance };
+  }
   const distance = shape.radius || isoRayBoundary(shape.center, direction, shape.loops);
   if (!distance) return shape.center;
   return { x: shape.center.x + direction.x * distance, y: shape.center.y + direction.y * distance };
@@ -203,6 +237,12 @@ function isoPartialSVG(ref) {
   s += `<text x="${r1(cx)}" y="${r1(cy + gap + m.letter)}" text-anchor="middle" ${isoTextAttrs(m, !!ref.italicBottom)} fill="${line}">${esc(ref.textBottom || '')}</text>`;
   return s;
 }
+function isoCornerMarkSVG(mode, x, y) {
+  if (!['circle', 'concentric'].includes(mode)) return '';
+  const r = ISO_STYLE.letter * ISO_STYLE.scale * 0.48;
+  const circle = radius => `<circle cx="${r1(x)}" cy="${r1(y)}" r="${r1(radius)}" fill="#fff" stroke="#17191d" stroke-width="${ISO_STYLE.strokeFrame}"/>`;
+  return mode === 'concentric' ? circle(r) + circle(r * 0.52) : circle(r);
+}
 function isoRefSVG(ref) {
   const type = isoType(ref), shape = isoTargetShape(ref);
   if (!shape) return '';
@@ -215,6 +255,7 @@ function isoRefSVG(ref) {
   const target = isoTargetBoundary(ref, elbow) || center;
   const anchor = isoLeaderAnchor(ref, type, elbow);
   let drawing = `<path d="M${r1(target.x)} ${r1(target.y)} L${r1(elbow.x)} ${r1(elbow.y)} L${r1(anchor.x)} ${r1(anchor.y)}" fill="none" stroke="${line}" stroke-width="${ISO_STYLE.strokeLeader}"/>`;
+  drawing += isoCornerMarkSVG(ref.cornerMark, elbow.x, elbow.y);
   if (tip === 'arrow') drawing += `<polygon points="${isoTipArrow(target.x, target.y, elbow.x, elbow.y, ISO_STYLE.tipArrowLenFactor * m.letter, ISO_STYLE.tipArrowWidthFactor * m.letter)}" fill="${line}"/>`;
   else drawing += `<polygon points="${isoTipTriangle(target.x, target.y, elbow.x, elbow.y, ISO_STYLE.tipTriangleFactor * m.letter)}" fill="${line}"/>`;
   drawing += type === 'partial' ? isoPartialSVG(ref) : isoFrameSVG(ref);
@@ -222,23 +263,24 @@ function isoRefSVG(ref) {
   return `<g data-id="${ref.id}" data-kind="isoRef" style="cursor:move"><title>${esc(label)} — déplacer pour repositionner</title>${drawing}</g>`;
 }
 function createIsoReference(targetKind, targetId) {
-  const target = targetKind === 'surface' ? (SF(targetId) && spos(SF(targetId))) : isoTargetCenter({targetKind:'group',targetId});
-  if (!target) return toast('La cible de la référence n’existe plus.');
+  const target = { targetKind, targetId }, ownerPieceId = isoTargetOwner(target), center = isoTargetCenter(target);
+  if (!ownerPieceId || !center) return toast('Choisissez une surface ou un groupe de surfaces appartenant à une seule pièce.');
   checkpoint();
-  const ref={id:uid(),targetKind,targetId,x:target.x+110,y:target.y-70,elbowY:target.y,text:'A',textBottom:'',type:'element',tip:ISO_STYLE.tipStyle};
-  ref.elbowX=isoDefaultElbow(ref).x;
-  if(!S().isoRefs) S().isoRefs=[]; S().isoRefs.push(ref);
-  setTool('select'); sel.clear(); sel.add(ref.id); changed(); toast('Référence ISO ajoutée (carré) — panneau de droite : texte, symbole carré / partielle, extrémité du rappel.');
+  const ref = { id: uid(), ...target, ownerPieceId, x: center.x + 110, y: center.y - 70, elbowY: center.y, text: 'A', textBottom: '', type: 'element', tip: ISO_STYLE.tipStyle };
+  ref.elbowX = isoDefaultElbow(ref).x;
+  if (!S().isoRefs) S().isoRefs = [];
+  S().isoRefs.push(ref);
+  setTool('select'); sel.clear(); sel.add(ref.id); changed(); toast('Indicateur ISO ajouté à la surface / au groupe de la pièce.');
 }
 
 /* ============================================================
    Spécifications — cadres de tolérance ISO 1101 (feature control frames).
-   Un cadre = une suite de compartiments [symbole | indication | références].
-   Chaque compartiment porte un symbole de caractéristique choisi dans une
+   Un cadre = une suite de sections [symbole | indication | références].
+   Chaque section porte un symbole de caractéristique choisi dans une
    liste, un texte libre (valeur, diamètre, lettre de référence…) et des
    indicateurs encerclés (Ⓜ maxi matière, Ⓔ gabarit / enveloppe, Ⓛ, Ⓣ, Ⓕ).
-   Chaque lien vers une surface ou un groupe de références a son coude
-   bleu et son extrémité réglable : flèche, triangle plein ou trait simple.
+   Chaque spécification est liée à une pièce unique ; son lien a un coude
+   bleu et une extrémité réglable : flèche, triangle plein ou trait simple.
    Symboles dessinés avec la police technique osifont (couverture GPS
    vérifiée : ⏤ ⏥ ○ ⌭ ⌒ ⌓ ⟂ ∠ ∥ ⌖ ◎ ⌯ ↗ ⌰ ⌀ ± et Ⓜ Ⓛ Ⓔ Ⓣ Ⓕ).
    ============================================================ */
@@ -272,7 +314,7 @@ const SPEC_MODIFIER_CHARS = new Map(SPEC_MODIFIERS.map(([id, ch]) => [id, ch]));
 const SPEC_TIPS = [['arrow', 'Flèche'], ['triangle', 'Triangle plein'], ['line', 'Trait simple']];
 const SPEC_TIP_IDS = new Set(SPEC_TIPS.map(([id]) => id));
 function specTip(t) { return SPEC_TIP_IDS.has(t.tip) ? t.tip : 'arrow'; }
-/* Contenu textuel d'un compartiment : symbole + indication + indicateurs. */
+/* Contenu textuel d'une section : symbole + indication + indicateurs. */
 function specCellText(cell) {
   const parts = [];
   if (cell.sym && SPEC_SYMBOL_CHARS.has(cell.sym)) parts.push(SPEC_SYMBOL_CHARS.get(cell.sym));
@@ -280,7 +322,7 @@ function specCellText(cell) {
   for (const m of cell.mods || []) if (SPEC_MODIFIER_CHARS.has(m)) parts.push(SPEC_MODIFIER_CHARS.get(m));
   return parts.join('');
 }
-/* Métriques du cadre : largeur de chaque compartiment, largeur et hauteur totales. */
+/* Métriques du cadre : largeur de chaque section, largeur et hauteur totales. */
 function specFrameLayout(spec) {
   const m = isoMetrics(), h = m.letter, pad = ISO_STYLE.framePadFactor * h, minW = ISO_STYLE.frameWFactor * h;
   const cells = (spec.cells || []).map(cell => {
@@ -320,29 +362,107 @@ function specTargetSVG(spec, target) {
   const targetPt = isoTargetBoundary(target, elbow) || shape.center;
   const anchor = rectEdgePoint(spec.x, spec.y, lay.w, lay.h, elbow.x, elbow.y);
   let s = `<path d="M${r1(targetPt.x)} ${r1(targetPt.y)} L${r1(elbow.x)} ${r1(elbow.y)} L${r1(anchor.x)} ${r1(anchor.y)}" fill="none" stroke="${line}" stroke-width="${ISO_STYLE.strokeLeader}"/>`;
+  s += isoCornerMarkSVG(target.cornerMark, elbow.x, elbow.y);
   if (tip === 'arrow') s += `<polygon points="${isoTipArrow(targetPt.x, targetPt.y, elbow.x, elbow.y, ISO_STYLE.tipArrowLenFactor * m.letter, ISO_STYLE.tipArrowWidthFactor * m.letter)}" fill="${line}"/>`;
   else if (tip === 'triangle') s += `<polygon points="${isoTipTriangle(targetPt.x, targetPt.y, elbow.x, elbow.y, ISO_STYLE.tipTriangleFactor * m.letter)}" fill="${line}"/>`;
   return s;
 }
+function specAnnotationText(spec) {
+  const a = spec.annotation || {}; if (!a.enabled) return '';
+  const repeat = Math.max(1, Math.floor(Number(a.repeat) || 1));
+  const base = `${repeat > 1 ? `${repeat}x ` : ''}${a.diameter || ''}${a.value || ''}`;
+  if (a.toleranceMode === 'symmetric' && a.toleranceUpper) return `${base}±${a.toleranceUpper}`;
+  if (a.toleranceMode === 'asymmetric') return `${base}+${a.toleranceUpper || ''}-${a.toleranceLower || ''}`;
+  if (a.toleranceMode === 'class') return `${base}${a.toleranceClass || ''}`;
+  return base;
+}
+function specAnnotationSVG(spec) {
+  const a = spec.annotation || {}; if (!a.enabled) return '';
+  const repeat = Math.max(1, Math.floor(Number(a.repeat) || 1));
+  const base = `${repeat > 1 ? `${repeat}x ` : ''}${a.diameter || ''}${a.value || ''}`;
+  const upper = String(a.toleranceUpper || ''), lower = String(a.toleranceLower || '');
+  const suffix = a.toleranceMode === 'symmetric' && upper ? `±${upper}` : a.toleranceMode === 'class' ? String(a.toleranceClass || '') : '';
+  const approxW = richTextWidth(base + suffix + upper + lower, 12);
+  let content = esc(base);
+  if (a.toleranceMode === 'symmetric' && upper) content += `±${esc(upper)}`;
+  else if (a.toleranceMode === 'asymmetric' && (upper || lower)) content += `<tspan baseline-shift="super" font-size="8">+${esc(upper)}</tspan><tspan baseline-shift="sub" font-size="8">−${esc(lower)}</tspan>`;
+  else if (a.toleranceMode === 'class' && a.toleranceClass) content += esc(a.toleranceClass);
+  return `<text x="${r1(spec.x + 1)}" y="${r1(spec.y - 4)}" font-family="Arial, sans-serif" font-size="12" fill="#17191d" text-anchor="start" data-width="${r1(approxW)}">${content}</text>`;
+}
+const SPEC_COMPLEMENT_SYMBOLS = [
+  ['sym', '\u232F', 'Symétrie'], ['para', '\u2225', 'Parallélisme'],
+  ['perpen', '\u27C2', 'Perpendicularité'], ['angle', '\u2220', 'Angulosité']
+];
+const SPEC_COMPLEMENT_CHARS = new Map(SPEC_COMPLEMENT_SYMBOLS.map(([id, ch]) => [id, ch]));
+function specComplementaryCellSVG(spec, id, x) {
+  const a = spec.annotation || {}, data = a.complementaryData?.[id] || {};
+  const m = isoMetrics(), h = ISO_STYLE.frameHFactor * m.letter;
+  const symbol = SPEC_COMPLEMENT_CHARS.get(data.sym) || SPEC_COMPLEMENT_CHARS.get('sym');
+  const text = String(data.text || ''), pad = ISO_STYLE.framePadFactor * m.letter;
+  const symW = Math.max(ISO_STYLE.frameWFactor * m.letter, textW(symbol, m.font) + 2 * pad);
+  const textWpx = text ? textW(text, m.font) + 2 * pad : ISO_STYLE.frameWFactor * m.letter;
+  const w = symW + textWpx, y = spec.y, line = '#17191d';
+  let out = `<rect x="${r1(x)}" y="${r1(y)}" width="${r1(w)}" height="${r1(h)}" fill="#fff" stroke="${line}" stroke-width="${ISO_STYLE.strokeFrame}"/><line x1="${r1(x + symW)}" y1="${r1(y)}" x2="${r1(x + symW)}" y2="${r1(y + h)}" stroke="${line}" stroke-width="${ISO_STYLE.strokeFrame}"/>`;
+  out += `<text x="${r1(x + symW / 2)}" y="${r1(y + h / 2 + m.letter / 2)}" text-anchor="middle" ${isoTextAttrs(m, false)} fill="${line}">${esc(symbol)}</text>`;
+  if (text) out += `<text x="${r1(x + symW + textWpx / 2)}" y="${r1(y + h / 2 + m.letter / 2)}" text-anchor="middle" ${isoTextAttrs(m, false)} fill="${line}">${esc(text)}</text>`;
+  return { svg: out, w };
+}
+function specSupplementarySVG(spec) {
+  const ids = spec.annotation?.supplementary || [];
+  if (!ids.length) return '';
+  const lay = specFrameLayout(spec), h = isoMetrics().letter, gapW = h * 0.72, cy = spec.y + lay.h / 2;
+  let x = spec.x + lay.w, out = '';
+  const marker = (kind, atX, pointRight = false) => {
+    const size = gapW * 0.82, left = atX, right = atX + gapW;
+    if (kind === 'intersection' || kind === 'orientation') {
+      const points = pointRight
+        ? `${r1(left)},${r1(cy-size/2)} ${r1(right)},${r1(cy)} ${r1(left)},${r1(cy+size/2)}`
+        : `${r1(right)},${r1(cy-size/2)} ${r1(left)},${r1(cy)} ${r1(right)},${r1(cy+size/2)}`;
+      return `<polygon points="${points}" fill="#fff" stroke="#17191d" stroke-width="${ISO_STYLE.strokeFrame}"/>`;
+    }
+    if (kind === 'direction') return `<path d="M${r1(right)} ${r1(cy)}H${r1(left)} M${r1(left)} ${r1(cy)}l${r1(size*0.42)} ${r1(-size*0.35)} M${r1(left)} ${r1(cy)}l${r1(size*0.42)} ${r1(size*0.35)}" fill="none" stroke="#17191d" stroke-width="${ISO_STYLE.strokeFrame}"/>`;
+    const r = size / 2;
+    return `<circle cx="${r1((left+right)/2)}" cy="${r1(cy)}" r="${r1(r)}" fill="#fff" stroke="#17191d" stroke-width="${ISO_STYLE.strokeFrame}"/>`;
+  };
+  for (const id of ids) {
+    if (!SPEC_COMPLEMENTARY_INDICATORS.some(([known]) => known === id)) continue;
+    out += marker(id, x); x += gapW;
+    const cell = specComplementaryCellSVG(spec, id, x); out += cell.svg; x += cell.w;
+    if (id === 'orientation') { out += marker(id, x, true); x += gapW; }
+  }
+  return out;
+}
+function specSupplementaryWidth(spec) {
+  const gapW = isoMetrics().letter * 0.72;
+  return (spec.annotation?.supplementary || []).reduce((width, id) => {
+    if (!SPEC_COMPLEMENTARY_INDICATORS.some(([known]) => known === id)) return width;
+    const cell = specComplementaryCellSVG(spec, id, 0);
+    return width + gapW + cell.w + (id === 'orientation' ? gapW : 0);
+  }, 0);
+}
 function specSVG(spec) {
   const leaders = (spec.targets || []).map(t => specTargetSVG(spec, t)).join('');
-  return `<g data-id="${spec.id}" data-kind="isoSpec" style="cursor:move"><title>Cadre de tolérance — glisser pour déplacer, double-clic pour modifier</title>${leaders}${specFrameSVG(spec)}</g>`;
+  return `<g data-id="${spec.id}" data-kind="isoSpec" style="cursor:move"><title>Cadre de tolérance — glisser pour déplacer, double-clic pour modifier</title>${leaders}${specFrameSVG(spec)}${specAnnotationSVG(spec)}${specSupplementarySVG(spec)}</g>`;
 }
-/* Création : une ou plusieurs cibles (surfaces et groupes de références). */
+/* Une spécification est rattachée à une seule pièce. */
 function createSpec(targetIds) {
-  const targets = targetIds.map(id => SF(id) ? { targetKind: 'surface', targetId: id } : { targetKind: 'group', targetId: id })
-    .filter(t => specTargetCenter(t));
+  const targets = [...new Set(targetIds)].map(isoComponentFromId).filter(Boolean);
   if (!targets.length) return null;
+  const ownerPieceId = isoTargetOwner(targets[0]);
+  if (!ownerPieceId || targets.some(target => isoTargetOwner(target) !== ownerPieceId)) return null;
+  const centers = targets.map(isoTargetCenter).filter(Boolean);
+  if (!centers.length) return null;
+  const x0 = Math.min(...centers.map(point => point.x)), y0 = Math.min(...centers.map(point => point.y));
   checkpoint();
-  const first = specTargetCenter(targets[0]);
   const spec = {
-    id: uid(), x: first.x + 110, y: first.y - 70,
+    id: uid(), ownerPieceId, x: x0 + 110, y: y0 - 70,
     cells: [{ sym: 'position', text: '', mods: [] }, { sym: '', text: '0,05', mods: [] }],
-    targets: targets.map(t => ({ ...t, tip: 'arrow' }))
+    annotation: { enabled: false, repeat: 1, diameter: '', value: '', toleranceMode: 'none', toleranceUpper: '', toleranceLower: '', toleranceClass: '', supplementary: [], complementaryData: {} },
+    targets: targets.map(target => ({ ...target, tip: 'arrow' }))
   };
-  spec.targets.forEach(t => {
-    const de = specDefaultElbow(spec, t);
-    t.elbowX = de.x; t.elbowY = de.y;
+  spec.targets.forEach(target => {
+    const elbow = specDefaultElbow(spec, target);
+    target.elbowX = elbow.x; target.elbowY = elbow.y;
   });
   if (!S().isoSpecs) S().isoSpecs = [];
   S().isoSpecs.push(spec);
@@ -350,10 +470,31 @@ function createSpec(targetIds) {
 }
 /* ===== Éditeur des cadres de tolérance (panneau de droite et fenêtre) ===== */
 function specPreviewHTML(spec) {
-  const lay = specFrameLayout(spec);
-  return `<div class="spec-preview"><svg viewBox="${r1(spec.x - 8)} ${r1(spec.y - 8)} ${r1(lay.w + 16)} ${r1(lay.h + 16)}">${specFrameSVG(spec)}</svg></div>`;
+  const lay = specFrameLayout(spec), supplementary = specSupplementarySVG(spec);
+  const extra = specSupplementaryWidth(spec);
+  return `<div class="spec-preview"><svg viewBox="${r1(spec.x - 8)} ${r1(spec.y - 24)} ${r1(lay.w + extra + 16)} ${r1(lay.h + 32)}">${specFrameSVG(spec)}${specAnnotationSVG(spec)}${supplementary}</svg></div>`;
+}
+const SPEC_COMPLEMENTARY_INDICATORS = [
+  ['intersection', 'Indicateur de plan d’intersection'],
+  ['orientation', 'Indicateur de plan d’orientation'],
+  ['direction', 'Indicateur d’élément de direction'],
+  ['collection', 'Indicateur de plan de collection']
+];
+function specComplementaryHTML(spec) {
+  const selected = new Set(spec.annotation?.supplementary || []);
+  const buttons = SPEC_COMPLEMENTARY_INDICATORS.map(([id, label]) =>
+    `<button type="button" data-spec-complementary="${id}" class="${selected.has(id) ? 'active' : ''}">${esc(label)}</button>`).join('');
+  const fields = SPEC_COMPLEMENTARY_INDICATORS.filter(([id]) => selected.has(id)).map(([id, label]) => {
+    const data = spec.annotation?.complementaryData?.[id] || {};
+    return `<div class="spec-comp-field"><b>${esc(label)}</b><div class="spec-cell-row">
+      <select data-spec-comp="${id}" data-f="sym" aria-label="Symbole">${SPEC_COMPLEMENT_SYMBOLS.map(([sym, ch, name]) => `<option value="${sym}" ${(data.sym || 'sym') === sym ? 'selected' : ''}>${ch} ${esc(name)}</option>`).join('')}</select>
+      <input type="text" data-spec-comp="${id}" data-f="text" value="${esc(data.text || '')}" placeholder="texte" aria-label="Texte">
+    </div></div>`;
+  }).join('');
+  return `<div class="spec-complementary">${buttons}</div>${fields ? `<div class="spec-complement-fields">${fields}</div>` : ''}`;
 }
 function specTargetLabel(t) {
+  if (t.targetKind === 'piece') { const p = P(t.targetId); return p ? `${p.name} (${p.num})` : 'pièce supprimée'; }
   if (t.targetKind === 'surface') { const s = SF(t.targetId); return s ? sname(s) : 'cible supprimée'; }
   const g = G(t.targetId); return g ? (g.name || 'Référence') : 'cible supprimée';
 }
@@ -370,26 +511,44 @@ function specEditorHTML(spec) {
       <div class="spec-mods">
         ${SPEC_MODIFIERS.map(([id, ch, lab]) => `<button type="button" data-spec-mod="${i}" data-mod="${id}" class="${(c.mods || []).includes(id) ? 'active' : ''}" title="${esc(lab)}">${ch}</button>`).join('')}
         <span class="spec-cell-acts">
-          <button type="button" data-spec-cell-act="left" data-i="${i}" title="Déplacer le compartiment à gauche"${i ? '' : ' disabled'}>◀</button>
-          <button type="button" data-spec-cell-act="right" data-i="${i}" title="Déplacer le compartiment à droite"${i < spec.cells.length - 1 ? '' : ' disabled'}>▶</button>
-          <button type="button" data-spec-cell-act="del" data-i="${i}" class="danger" title="Supprimer le compartiment">✕</button>
+          <button type="button" data-spec-cell-act="left" data-i="${i}" title="Déplacer la section à gauche"${i ? '' : ' disabled'}>◀</button>
+          <button type="button" data-spec-cell-act="right" data-i="${i}" title="Déplacer la section à droite"${i < spec.cells.length - 1 ? '' : ' disabled'}>▶</button>
+          <button type="button" data-spec-cell-act="del" data-i="${i}" class="danger" title="Supprimer la section">✕</button>
         </span>
       </div>
     </div>`).join('');
   const targets = (spec.targets || []).map((t, i) => `
     <div class="spec-target">
-      <button data-goto="${t.targetId}" title="Aller à la cible">${esc(specTargetLabel(t))}</button>
-      <select data-spec-tip="${i}" title="Extrémité du lien vers la cible">${SPEC_TIPS.map(([id, lab]) => `<option value="${id}" ${specTip(t) === id ? 'selected' : ''}>${esc(lab)}</option>`).join('')}</select>
-      <button type="button" data-spec-target-act="del" data-i="${i}" class="danger" title="Retirer ce lien">✕</button>
+      <button data-goto="${t.targetId}" title="Aller au composant lié">${esc(specTargetLabel(t))}</button>
+      <select data-spec-tip="${i}" title="Extrémité du lien vers ce composant">${SPEC_TIPS.map(([id, lab]) => `<option value="${id}" ${specTip(t) === id ? 'selected' : ''}>${esc(lab)}</option>`).join('')}</select>
+    </div><div class="corner-mark-buttons" aria-label="Marqueur au coude">
+      ${[['','Aucun'],['circle','○'],['concentric','◎']].map(([value,label]) => `<button type="button" data-spec-corner="${i}" data-value="${value}" title="${value === '' ? 'Aucun marqueur' : value === 'circle' ? 'Cercle autour du coude' : 'Deux cercles concentriques'}" class="${(t.cornerMark || '') === value ? 'active' : ''}">${label}</button>`).join('')}
     </div>`).join('');
+  const ann = spec.annotation || { enabled: false, repeat: 1, diameter: '', value: '', toleranceMode: 'none', toleranceUpper: '', toleranceLower: '', toleranceClass: '', supplementary: [], complementaryData: {} };
+  const toleranceMode = ann.toleranceMode || 'none';
+  const annotationEditor = `
+    <h4>Spécification adjacente</h4>
+    <label class="spec-ann-enable"><input type="checkbox" data-spec-ann="enabled" ${ann.enabled ? 'checked' : ''}> Afficher la spécification adjacente</label>
+    <div class="spec-ann-fields">
+      <label>Répétitions <input type="number" min="1" step="1" data-spec-ann="repeat" value="${Math.max(1, Number(ann.repeat) || 1)}"></label>
+      <label>Diamètre <select data-spec-ann="diameter" aria-label="Symbole de diamètre">${[['','Aucun'],['Ø','Ø']].map(([v,l])=>`<option value="${esc(v)}" ${ann.diameter===v?'selected':''}>${l}</option>`).join('')}</select></label>
+      <label>Texte <input type="text" data-spec-ann="value" value="${esc(ann.value || '')}" placeholder="ex. 5" aria-label="Texte de spécification"></label>
+      <label>Tolérance <select data-spec-ann="toleranceMode" aria-label="Type de tolérance">${[['none','Aucune'],['symmetric','± même valeur'],['asymmetric','+ / − valeurs différentes'],['class','Classe (ex. E6)']].map(([v,l])=>`<option value="${v}" ${toleranceMode===v?'selected':''}>${l}</option>`).join('')}</select></label>
+      ${toleranceMode === 'symmetric' ? `<label>± <input type="text" data-spec-ann="toleranceUpper" value="${esc(ann.toleranceUpper || '')}" placeholder="0,1"></label>` : ''}
+      ${toleranceMode === 'asymmetric' ? `<label>Exposant (+) <input type="text" data-spec-ann="toleranceUpper" value="${esc(ann.toleranceUpper || '')}" placeholder="0,1"></label><label>Indice (−) <input type="text" data-spec-ann="toleranceLower" value="${esc(ann.toleranceLower || '')}" placeholder="0,0"></label>` : ''}
+      ${toleranceMode === 'class' ? `<label>Classe <input type="text" data-spec-ann="toleranceClass" value="${esc(ann.toleranceClass || '')}" placeholder="E6"></label>` : ''}
+    </div>`;
   return `
     ${specPreviewHTML(spec)}
-    <h4>Compartiments</h4>
+    ${annotationEditor}
+    <h4>Sections</h4>
     ${cells}
-    <div class="btns"><button type="button" data-spec-cell-act="add">＋ Compartiment</button></div>
-    <h4>Liens (${(spec.targets || []).length})</h4>
-    ${targets || '<div class="muted">aucun lien</div>'}
-    <div class="btns"><button type="button" data-spec-addlink class="primary">✎ Ajouter / retirer un lien…</button></div>`;
+    <div class="btns"><button type="button" data-spec-cell-act="add">＋ Section</button></div>
+    <h4>Indications complémentaires</h4>
+    ${specComplementaryHTML(spec)}
+    <h4>Composants liés</h4>
+    ${targets || '<div class="muted">Aucun composant lié</div>'}
+    <div class="btns"><button type="button" data-spec-addlink class="primary">✎ Ajouter / retirer des composants…</button></div>`;
 }
 function wireSpecEditor(root, spec, redraw) {
   const structural = fn => { checkpoint(); fn(); changed(); if (redraw) redraw(); };
@@ -412,6 +571,47 @@ function wireSpecEditor(root, spec, redraw) {
   })));
   $$('[data-spec-tip]', root).forEach(selInp => selInp.addEventListener('change', () => structural(() => {
     const t = spec.targets[+selInp.dataset.specTip]; if (t) t.tip = selInp.value;
+  })));
+  $$('[data-spec-corner]', root).forEach(btn => btn.addEventListener('click', () => structural(() => {
+    const t = spec.targets[+btn.dataset.specCorner]; if (t) t.cornerMark = btn.dataset.value;
+  })));
+  $$('[data-spec-ann]', root).forEach(inp => {
+    let cp = false;
+    inp.addEventListener('focus', () => cp = false);
+    const update = () => {
+      if (!cp) { checkpoint(); cp = true; }
+      spec.annotation = spec.annotation || { enabled: false, repeat: 1, diameter: '', value: '', toleranceMode: 'none', toleranceUpper: '', toleranceLower: '', toleranceClass: '', supplementary: [], complementaryData: {} };
+      const key = inp.dataset.specAnn;
+      spec.annotation[key] = key === 'enabled' ? inp.checked : key === 'repeat' ? Math.max(1, Math.floor(Number(inp.value) || 1)) : inp.value;
+      if (key === 'repeat') inp.value = spec.annotation.repeat;
+      if (key === 'toleranceMode') { changed(); if (redraw) redraw(); return; }
+      render(); autosave(); redrawPreview();
+    };
+    inp.addEventListener(inp.type === 'checkbox' || inp.tagName === 'SELECT' ? 'change' : 'input', update);
+  });
+  $$('[data-spec-comp]', root).forEach(inp => {
+    let cp = false;
+    inp.addEventListener('focus', () => cp = false);
+    const update = () => {
+      if (!cp) { checkpoint(); cp = true; }
+      spec.annotation = spec.annotation || { enabled: false, supplementary: [], complementaryData: {} };
+      spec.annotation.complementaryData = spec.annotation.complementaryData || {};
+      const data = spec.annotation.complementaryData[inp.dataset.specComp] || (spec.annotation.complementaryData[inp.dataset.specComp] = { sym: 'sym', text: '' });
+      data[inp.dataset.f] = inp.value;
+      render(); autosave(); redrawPreview();
+    };
+    inp.addEventListener(inp.tagName === 'SELECT' ? 'change' : 'input', update);
+  });
+  $$('[data-spec-complementary]', root).forEach(btn => btn.addEventListener('click', () => structural(() => {
+    spec.annotation = spec.annotation || { enabled: false, repeat: 1, diameter: '', value: '', toleranceMode: 'none', toleranceUpper: '', toleranceLower: '', toleranceClass: '', supplementary: [], complementaryData: {} };
+    spec.annotation.supplementary = spec.annotation.supplementary || [];
+    const id = btn.dataset.specComplementary, index = spec.annotation.supplementary.indexOf(id);
+    if (index >= 0) spec.annotation.supplementary.splice(index, 1);
+    else {
+      spec.annotation.supplementary.push(id);
+      spec.annotation.complementaryData = spec.annotation.complementaryData || {};
+      spec.annotation.complementaryData[id] = spec.annotation.complementaryData[id] || { sym: 'sym', text: '' };
+    }
   })));
   $$('[data-spec-mod]', root).forEach(btn => btn.addEventListener('click', () => structural(() => {
     const c = spec.cells[+btn.dataset.specMod]; if (!c) return;

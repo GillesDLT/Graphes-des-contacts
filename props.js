@@ -57,12 +57,13 @@ function isoRefPanel(r) {
         ${fRow('Italique bas', fCheck('italicBottom', !!r.italicBottom, 'Écrire en italique'))}`
       : fRow('Identifiant', fText('text', r.text || 'A', 'A'))}
     ${fRow('Extrémité du rappel', fSel('tip', tip, [['triangle', 'Triangle plein (équilatéral)'], ['arrow', 'Flèche']]))}
-    <p class="muted">Rappel à deux segments : glissez le coude bleu, le rappel se branche sur l’arête du symbole la plus proche. Pour la partielle, chaque demi-cercle a son texte et son italique (le texte bas peut rester vide).</p>
+    ${fRow('Marqueur du coude', `<div class="corner-mark-buttons">${[['','Aucun'],['circle','○'],['concentric','◎']].map(([value,label]) => `<button type="button" data-ref-corner="${value}" title="${value === '' ? 'Aucun marqueur' : value === 'circle' ? 'Cercle autour du coude' : 'Deux cercles concentriques'}" class="${(r.cornerMark || '') === value ? 'active' : ''}">${label}</button>`).join('')}</div>`)}
+    <p class="muted">L’indicateur est attaché à la surface ou au groupe de surfaces choisi et suit sa pièce. Rappel à deux segments : glissez le coude bleu. Pour la référence partielle, chaque demi-cercle a son texte et son italique.</p>
     <div class="btns"><button data-pa="del" class="danger">🗑 Supprimer</button></div>`;
 }
 function isoSpecPanel(sp) {
   return `<h3>${ISO_SPEC_ICON} Spécification</h3>` + specEditorHTML(sp) +
-    `<p class="muted">Glissez le cadre pour le déplacer ; les poignées bleues déplacent le coude de chaque lien. Chaque lien vise une surface ou un groupe de références, avec l’extrémité de votre choix (flèche, triangle plein ou trait simple). Double-clic sur le cadre pour l’éditer dans une fenêtre.</p>
+    `<p class="muted">Glissez le cadre pour le déplacer ; les poignées bleues déplacent le coude de chaque lien. La spécification vise les surfaces et groupes liés d’une seule pièce, et suit cette pièce lorsqu’elle est déplacée. Ses indications ne peuvent pas viser les composants d’une autre pièce. Chaque lien se règle en flèche, triangle plein ou trait simple. Double-clic sur le cadre pour l’éditer dans une fenêtre.</p>
     <div class="btns"><button data-pa="del" class="danger">🗑 Supprimer</button></div>`;
 }
 function piecePanel(p) {
@@ -169,7 +170,7 @@ function applyField(target, inp) {
   if (kd === 'isoRef' && k === 'type') {
     target.type = v;
     if (v === 'partial' && (target.text === 'A' || !target.text)) target.text = '⌀';
-    else if (v === 'element' && target.text === '⌀') target.text = 'A';
+    else if (v !== 'partial' && target.text === '⌀') target.text = 'A';
     const elbow = isoDefaultElbow(target); target.elbowX = elbow.x; target.elbowY = elbow.y; return true;
   }
   if ((kd === 'liaison' || kd === 'cfg') && k === 'curved') { target.curved = v; target.bend = v ? (target.bend || 80) : 0; return true; }
@@ -237,6 +238,10 @@ function wireProps(box, target) {
   $$('[data-eye]', box).forEach(b => b.onclick = async () => setColor(b.dataset.eye, await eyeDrop()));
   $$('[data-cur]', box).forEach(b => b.onclick = () => setColor(b.dataset.cur, $('#curColor').value));
   $$('[data-goto]', box).forEach(b => b.onclick = () => { sel.clear(); sel.add(b.dataset.goto); changed(); });
+  $$('[data-ref-corner]', box).forEach(b => b.onclick = () => {
+    if (!target || kindOf(target.id) !== 'isoRef') return;
+    checkpoint(); target.cornerMark = b.dataset.refCorner; changed();
+  });
   $$('[data-pa]', box).forEach(b => b.onclick = () => propAction(b.dataset.pa, target, b));
 }
 

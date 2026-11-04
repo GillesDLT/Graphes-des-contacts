@@ -142,6 +142,16 @@ function loadDoc(o) {
       if (!Array.isArray(sp.cells) || !sp.cells.length) sp.cells = [{ sym: '', text: '', mods: [] }];
       sp.cells.forEach(c => { if (c.text == null) c.text = ''; if (!Array.isArray(c.mods)) c.mods = []; });
       if (!Array.isArray(sp.targets)) sp.targets = [];
+      sp.annotation = sp.annotation || {};
+      const ann = sp.annotation;
+      if (ann.diameter === '⌀' || ann.diameter === 'φ') ann.diameter = 'Ø';
+      if (ann.diameter == null) ann.diameter = '';
+      if (!ann.toleranceMode) ann.toleranceMode = 'none';
+      if (ann.toleranceUpper == null) ann.toleranceUpper = '';
+      if (ann.toleranceLower == null) ann.toleranceLower = '';
+      if (ann.toleranceClass == null) ann.toleranceClass = '';
+      if (!Array.isArray(ann.supplementary)) ann.supplementary = [];
+      if (!ann.complementaryData || typeof ann.complementaryData !== 'object') ann.complementaryData = {};
     });
     migrateCFs(s);
     s.pieces.forEach(p => {
@@ -544,9 +554,64 @@ function cleanupOrphans(s = S()) {
     return cf && s.surfaces.some(f => (cf.a === f.id || cf.b === f.id) && g.members.includes(f.pieceId));
   }));
   s.groups = s.groups.filter(g => g.members.length);
-  s.isoRefs = (s.isoRefs || []).filter(r => !r.targetKind || (r.targetKind === 'surface' ? s.surfaces.some(f=>f.id===r.targetId) : s.groups.some(g=>g.id===r.targetId)));
-  (s.isoSpecs = s.isoSpecs || []).forEach(sp => sp.targets = (sp.targets || []).filter(t => t.targetKind === 'surface' ? s.surfaces.some(f => f.id === t.targetId) : s.groups.some(g => g.id === t.targetId)));
-  s.isoSpecs = s.isoSpecs.filter(sp => sp.targets.length);
+  const pieceIds = new Set(s.pieces.map(piece => piece.id));
+  const surfaceById = new Map(s.surfaces.map(surface => [surface.id, surface]));
+  const componentForPiece = pieceId => {
+    const surface = s.surfaces.find(item => item.pieceId === pieceId);
+    return surface ? { targetKind: 'surface', targetId: surface.id } : null;
+  };
+  const normalizeComponentTarget = target => {
+    if (!target) return null;
+    if (target.targetKind === 'piece') {
+      const component = componentForPiece(target.targetId);
+      return component ? { ...target, ...component } : null;
+    }
+    if (target.targetKind === 'surface') {
+      return surfaceById.has(target.targetId) ? target : null;
+    }
+    if (target.targetKind === 'group') {
+      const group = s.groups.find(item => item.id === target.targetId && item.kind === 'ref');
+      const members = group?.members || [];
+      if (!group || !members.length || members.some(id => !surfaceById.has(id))) return null;
+      const owners = new Set(members.map(id => surfaceById.get(id).pieceId));
+      return owners.size === 1 ? target : null;
+    }
+    return null;
+  };
+  const componentOwner = target => {
+    if (target?.targetKind === 'surface') return surfaceById.get(target.targetId)?.pieceId || null;
+    if (target?.targetKind === 'group') {
+      const group = s.groups.find(item => item.id === target.targetId && item.kind === 'ref');
+      const members = group?.members || [];
+      if (!group || !members.length || members.some(id => !surfaceById.has(id))) return null;
+      const owners = new Set(members.map(id => surfaceById.get(id).pieceId));
+      return owners.size === 1 ? [...owners][0] : null;
+    }
+    return null;
+  };
+  s.isoRefs = (s.isoRefs || []).filter(ref => {
+    const target = normalizeComponentTarget(ref);
+    const owner = componentOwner(target);
+    if (!target || !owner) return false;
+    Object.assign(ref, target, { ownerPieceId: owner });
+    return true;
+  });
+  s.isoSpecs = (s.isoSpecs || []).filter(spec => {
+    let targets = (spec.targets || []).map(normalizeComponentTarget).filter(Boolean);
+    let owner = pieceIds.has(spec.ownerPieceId) ? spec.ownerPieceId : (targets.length ? componentOwner(targets[0]) : null);
+    if (!owner) return false;
+    targets = targets.filter(target => componentOwner(target) === owner);
+    const unique = new Map(targets.map(target => [target.targetKind + ':' + target.targetId, target]));
+    targets = [...unique.values()];
+    if (!targets.length) {
+      const fallback = componentForPiece(owner);
+      if (fallback) targets = [fallback];
+    }
+    if (!targets.length) return false;
+    spec.ownerPieceId = owner;
+    spec.targets = targets;
+    return true;
+  });
   const repetitions = new Set(s.groups.filter(g => g.kind === 'rep').map(g => g.id));
   s.groups.filter(g => g.kind === 'fonc').forEach(g => g.repLabelIds = [...new Set(g.repLabelIds || [])].filter(id => repetitions.has(id)));
   if (cleanupCycles(s)) cleanupOrphans(s);
@@ -558,6 +623,8 @@ function collect(ids) {
   for (const id of ids) {
     const k = kindOf(id);
     if (k === 'piece') pids.add(id);
+    if (k === 'isoRef') { const ref = (s.isoRefs || []).find(x => x.id === id); if (ref?.ownerPieceId) pids.add(ref.ownerPieceId); }
+    if (k === 'isoSpec') { const spec = (s.isoSpecs || []).find(x => x.id === id); if (spec?.ownerPieceId) pids.add(spec.ownerPieceId); }
     if (k === 'cfg') { const c = C(id); pids.add(SF(c.a).pieceId); pids.add(SF(c.b).pieceId); }
     if (k === 'group') {
       const g = G(id);
@@ -582,8 +649,8 @@ function collect(ids) {
     return included.has(c.cfId) && [...contents.surfaces, ...contents.references, ...contents.links].every(id => included.has(id));
   });
   const notes = (s.notes || []).filter(n => noteIds.has(n.id));
-  const isoRefs = (s.isoRefs || []).filter(r => isoRefIds.has(r.id));
-  const isoSpecs = (s.isoSpecs || []).filter(x => isoSpecIds.has(x.id));
+  const isoRefs = (s.isoRefs || []).filter(r => isoRefIds.has(r.id) || pids.has(r.ownerPieceId));
+  const isoSpecs = (s.isoSpecs || []).filter(x => isoSpecIds.has(x.id) || pids.has(x.ownerPieceId));
   return clone({ pieces, surfaces, liaisons, groups, cfgs, cycles, notes, isoRefs, isoSpecs, cycleSnapshot: !!s.cycleSnapshot, from: s.id });
 }
 function pasteData(data, offset) {
@@ -612,14 +679,16 @@ function pasteData(data, offset) {
     s.cfgs.push(c);
   }
   for (const n of d.notes || []) { n.id = nid(n.id); n.x += offset; n.y += offset; s.notes.push(n); }
-  for (const r of d.isoRefs || []) { r.id=nid(r.id); r.targetId=map.get(r.targetId)||r.targetId; r.x+=offset; r.y+=offset; if(Number.isFinite(r.elbowX))r.elbowX+=offset; if(Number.isFinite(r.elbowY))r.elbowY+=offset; s.isoRefs.push(r); }
+  for (const r of d.isoRefs || []) { r.id=nid(r.id); r.ownerPieceId=map.get(r.ownerPieceId)||r.ownerPieceId; r.targetId=map.get(r.targetId)||r.targetId; r.x+=offset; r.y+=offset; if(Number.isFinite(r.elbowX))r.elbowX+=offset; if(Number.isFinite(r.elbowY))r.elbowY+=offset; s.isoRefs.push(r); }
   for (const sp of d.isoSpecs || []) {
     sp.id = nid(sp.id);
+    sp.ownerPieceId = map.get(sp.ownerPieceId) || sp.ownerPieceId;
     (sp.targets || []).forEach(t => {
       t.targetId = map.get(t.targetId) || t.targetId;
       if (Number.isFinite(t.elbowX)) t.elbowX += offset;
       if (Number.isFinite(t.elbowY)) t.elbowY += offset;
     });
+    if (!sp.ownerPieceId) sp.ownerPieceId = (sp.targets || []).find(t => t.targetKind === 'piece')?.targetId;
     sp.x += offset; sp.y += offset;
     s.isoSpecs.push(sp);
   }
