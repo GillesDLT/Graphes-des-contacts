@@ -240,7 +240,7 @@ function isoPartialSVG(ref) {
 function isoCornerMarkSVG(mode, x, y) {
   if (!['circle', 'concentric'].includes(mode)) return '';
   const r = ISO_STYLE.letter * ISO_STYLE.scale * 0.48;
-  const circle = radius => `<circle cx="${r1(x)}" cy="${r1(y)}" r="${r1(radius)}" fill="#fff" stroke="#17191d" stroke-width="${ISO_STYLE.strokeFrame}"/>`;
+  const circle = radius => `<circle cx="${r1(x)}" cy="${r1(y)}" r="${r1(radius)}" fill="none" stroke="#17191d" stroke-width="${ISO_STYLE.strokeFrame}"/>`;
   return mode === 'concentric' ? circle(r) + circle(r * 0.52) : circle(r);
 }
 function isoRefSVG(ref) {
@@ -383,11 +383,15 @@ function specAnnotationSVG(spec) {
   const upper = String(a.toleranceUpper || ''), lower = String(a.toleranceLower || '');
   const suffix = a.toleranceMode === 'symmetric' && upper ? `±${upper}` : a.toleranceMode === 'class' ? String(a.toleranceClass || '') : '';
   const approxW = richTextWidth(base + suffix + upper + lower, 12);
+  const baseX = spec.x + 1, baselineY = spec.y - 4;
   let content = esc(base);
   if (a.toleranceMode === 'symmetric' && upper) content += `±${esc(upper)}`;
-  else if (a.toleranceMode === 'asymmetric' && (upper || lower)) content += `<tspan baseline-shift="super" font-size="8">+${esc(upper)}</tspan><tspan baseline-shift="sub" font-size="8">−${esc(lower)}</tspan>`;
+  else if (a.toleranceMode === 'asymmetric' && (upper || lower)) {
+    const toleranceX = r1(baseX + textW(base, '12px Arial, sans-serif'));
+    content += `<tspan x="${toleranceX}" baseline-shift="super" font-size="8">+${esc(upper)}</tspan><tspan x="${toleranceX}" baseline-shift="sub" font-size="8">−${esc(lower)}</tspan>`;
+  }
   else if (a.toleranceMode === 'class' && a.toleranceClass) content += esc(a.toleranceClass);
-  return `<text x="${r1(spec.x + 1)}" y="${r1(spec.y - 4)}" font-family="Arial, sans-serif" font-size="12" fill="#17191d" text-anchor="start" data-width="${r1(approxW)}">${content}</text>`;
+  return `<text x="${r1(baseX)}" y="${r1(baselineY)}" font-family="Arial, sans-serif" font-size="12" fill="#17191d" text-anchor="start" data-width="${r1(approxW)}">${content}</text>`;
 }
 const SPEC_COMPLEMENT_SYMBOLS = [
   ['sym', '\u232F', 'Symétrie'], ['para', '\u2225', 'Parallélisme'],
@@ -415,9 +419,10 @@ function specSupplementarySVG(spec) {
   const marker = (kind, atX, pointRight = false) => {
     const size = gapW * 0.82, left = atX, right = atX + gapW;
     if (kind === 'intersection' || kind === 'orientation') {
+      const top = spec.y, bottom = spec.y + lay.h;
       const points = pointRight
-        ? `${r1(left)},${r1(cy-size/2)} ${r1(right)},${r1(cy)} ${r1(left)},${r1(cy+size/2)}`
-        : `${r1(right)},${r1(cy-size/2)} ${r1(left)},${r1(cy)} ${r1(right)},${r1(cy+size/2)}`;
+        ? `${r1(left)},${r1(top)} ${r1(right)},${r1(cy)} ${r1(left)},${r1(bottom)}`
+        : `${r1(right)},${r1(top)} ${r1(left)},${r1(cy)} ${r1(right)},${r1(bottom)}`;
       return `<polygon points="${points}" fill="#fff" stroke="#17191d" stroke-width="${ISO_STYLE.strokeFrame}"/>`;
     }
     if (kind === 'direction') return `<path d="M${r1(right)} ${r1(cy)}H${r1(left)} M${r1(left)} ${r1(cy)}l${r1(size*0.42)} ${r1(-size*0.35)} M${r1(left)} ${r1(cy)}l${r1(size*0.42)} ${r1(size*0.35)}" fill="none" stroke="#17191d" stroke-width="${ISO_STYLE.strokeFrame}"/>`;
