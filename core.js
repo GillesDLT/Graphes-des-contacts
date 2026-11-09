@@ -62,6 +62,7 @@ const DEFAULT_SETTINGS = {
   showSpecs: true,
   showNominalZero: false,
   grid: true,
+  torseurLetters: { X: 'u', L: 'α', Y: 'v', M: 'β', Z: 'w', N: 'γ' },
   groupColors: { rep: '#e9edf6', fonc: '#fde7c4', ref: '#2b7de9' }
 };
 const SYMBOLS = ['EN', 'PV', 'GL', 'PG', 'HE', 'ROT', 'RD', 'AP', 'LA', 'LR', 'PO', 'GEN'];
@@ -128,6 +129,9 @@ function loadDoc(o) {
   if (!o || !Array.isArray(o.sheets) || !o.sheets.length) throw new Error('Fichier invalide');
   const base = clone(DEFAULT_SETTINGS);
   o.settings = Object.assign(base, o.settings || {});
+  const tl = (o.settings.torseurLetters && typeof o.settings.torseurLetters === 'object') ? o.settings.torseurLetters : {};
+  o.settings.torseurLetters = Object.assign({}, DEFAULT_SETTINGS.torseurLetters,
+    Object.fromEntries(Object.entries(tl).filter(([, v]) => typeof v === 'string' && v.trim())));
   const oldCame = o.settings.surfaceTypes.some(t => t.code === 'CA') ||
     o.sheets.some(s => Array.isArray(s.surfaces) && s.surfaces.some(f => f.type === 'CA'));
   o.settings.surfaceTypes = o.settings.surfaceTypes.filter(t => t.code !== 'CA');

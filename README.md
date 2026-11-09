@@ -37,8 +37,10 @@ projets ou comptes rendus.
 - Créer des **CF — conditions fonctionnelles**, avec un nom libre, des surfaces
   existantes ou nouvelles et, si besoin, un point et une normale.
 - Afficher sous chaque liaison son **torseur des actions transmissibles**
-  {T<sub>n1/n2</sub>}<sub>A</sub> = {X L ; Y M ; Z N}<sub>A</sub>, avec des
-  valeurs par défaut cohérentes avec l’axe choisi, modifiables une par une.
+  {T<sub>n1/n2</sub>}<sub>A</sub> = {u α ; v β ; w γ}<sub>A</sub>, avec des
+  valeurs par défaut cohérentes avec l’axe choisi, modifiables une par une. La
+  notation des composantes se règle dans **Paramètres** (u v w / α β γ par
+  défaut, ou X Y Z / L M N).
 - Annoter le graphe avec **ISO GPS** : références ISO (carré ou cercle partiel,
   rappel à coude) et **spécifications** — des cadres de tolérance ISO 1101 avec
   symboles de caractéristique, indications, indicateurs (Ⓜ maxi matière,
@@ -186,12 +188,17 @@ toutes ensemble, sans effacer leur couleur enregistrée.
 
 Le bouton **Torseurs** de la barre affiche ou masque, sous chaque liaison, son
 torseur des actions transmissibles. Les lignes sont les axes x, y, z ; la
-première colonne donne les efforts (X, Y, Z) et la seconde les moments
-(L, M, N). Les valeurs par défaut suivent le type de liaison et son axe ou sa
-normale (ex. Pivot sur x → L = 0, Appui plan de normale z → Z = N = 0) et
+première colonne donne les efforts / translations et la seconde les moments /
+rotations. Les valeurs par défaut suivent le type de liaison et son axe ou sa
+normale (ex. Pivot sur x → α = 0, Appui plan de normale z → w = γ = 0) et
 chaque valeur se modifie dans le panneau de la liaison, avec un retour aux
 valeurs par défaut en un clic. Le **point d’application** (A par défaut) se
 modifie à côté des valeurs, dans le même panneau.
+
+La **notation des composantes** se règle dans **Paramètres** : u v w et α β γ
+par défaut, ou saisir X Y Z et L M N pour la notation classique. Les
+composantes nulles restent des zéros et les valeurs déjà personnalisées sont
+conservées.
 
 ### Compter les cycles
 

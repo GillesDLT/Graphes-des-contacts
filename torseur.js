@@ -9,6 +9,13 @@ const TORSEUR_KEYS = ['X', 'L', 'Y', 'M', 'Z', 'N'];
 const FORCE_KEY = { x: 'X', y: 'Y', z: 'Z' };
 const MOMENT_KEY = { x: 'L', y: 'M', z: 'N' };
 const TORSEUR_AXES = ['x', 'y', 'z'];
+/* Lettres affichées dans le torseur : configurables dans Paramètres (défaut u v w pour les
+   efforts / translations, α β γ pour les moments / rotations). Les clés X,L,Y,M,Z,N désignent
+   les emplacements fixes (effort x, moment x, effort y, …) et restent stables si la notation change. */
+function torseurLetter(slot) {
+  const v = doc.settings.torseurLetters && doc.settings.torseurLetters[slot];
+  return (typeof v === 'string' && v.trim()) ? v.trim() : DEFAULT_SETTINGS.torseurLetters[slot] || slot;
+}
 
 /* 'x', '-x' et 'y_12' donnent l'axe x, x et y ; 'u_123' ou vide donne null. */
 function dirAxis(v) {
@@ -24,7 +31,7 @@ function torseurDefaults(l) {
   const sym = ltype(l.type).symbol || 'GEN';
   const d = l.details || {};
   const axis = dirAxis(d.axe), norm = dirAxis(d.normale);
-  const v = { X: 'X', L: 'L', Y: 'Y', M: 'M', Z: 'Z', N: 'N' };
+  const v = { X: torseurLetter('X'), L: torseurLetter('L'), Y: torseurLetter('Y'), M: torseurLetter('M'), Z: torseurLetter('Z'), N: torseurLetter('N') };
   const zeroForce = a => { if (a) v[FORCE_KEY[a]] = '0'; };
   const zeroMoment = a => { if (a) v[MOMENT_KEY[a]] = '0'; };
   switch (sym) {
@@ -32,7 +39,7 @@ function torseurDefaults(l) {
     case 'GL': zeroForce(axis); break;                                    // translation libre selon l'axe
     case 'PG': zeroForce(axis); zeroMoment(axis); break;
     case 'HE':                                                            // vis : L = -p/2π·X selon l'axe
-      if (axis) v[MOMENT_KEY[axis]] = `-p/2π·${FORCE_KEY[axis]}`;
+      if (axis) v[MOMENT_KEY[axis]] = `-p/2π·${torseurLetter(FORCE_KEY[axis])}`;
       break;
     case 'ROT': v.L = v.M = v.N = '0'; break;                             // 3 rotations libres
     case 'RD': {                                                          // doigt = normale : seule sa rotation est bloquée

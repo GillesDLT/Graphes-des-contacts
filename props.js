@@ -118,10 +118,10 @@ function torseurFields(l) {
   return `<h4>Torseur <span class="muted">{T_${esc(torseurTitle(l))}}_{${esc(torseurPoint(l))}}</span></h4>
     ${fRow('Point', fText('point', (l.details && l.details.point) || '', 'A (défaut)'))}
     <div class="torsor-grid">${[['X', 'L'], ['Y', 'M'], ['Z', 'N']].map(([a, b]) =>
-      `<label>${a}</label><input type="text" data-torsor="${a}" value="${esc(v[a])}" aria-label="Composante ${a}">` +
-      `<label>${b}</label><input type="text" data-torsor="${b}" value="${esc(v[b])}" aria-label="Composante ${b}">`).join('')}</div>
+      `<label>${esc(torseurLetter(a))}</label><input type="text" data-torsor="${a}" value="${esc(v[a])}" aria-label="Composante ${esc(torseurLetter(a))}">` +
+      `<label>${esc(torseurLetter(b))}</label><input type="text" data-torsor="${b}" value="${esc(v[b])}" aria-label="Composante ${esc(torseurLetter(b))}">`).join('')}</div>
     <div class="btns"><button data-pa="torsorreset">↺ Valeurs par défaut</button></div>
-    <p class="muted">S’affiche sous la liaison avec le bouton <b>Torseurs</b>. Lignes = axes x, y, z ; colonne 1 = efforts (X, Y, Z), colonne 2 = moments (L, M, N). Le point ci-dessus est son point d’application (A par défaut). Les valeurs par défaut suivent le type de liaison et son axe / normale ; chaque valeur est modifiable ici.</p>`;
+    <p class="muted">S’affiche sous la liaison avec le bouton <b>Torseurs</b>. Lignes = axes x, y, z ; colonne 1 = efforts / translations, colonne 2 = moments / rotations — la notation (par défaut u v w / α β γ) se change dans <b>Paramètres</b>. Le point ci-dessus est le point d’application (A par défaut). Les valeurs par défaut suivent le type de liaison et son axe / normale ; chaque valeur est modifiable ici.</p>`;
 }
 function groupPanel(g) {
   const memb = g.members.map(id => g.kind === 'ref' ? (SF(id) ? sname(SF(id)) : null) : (P(id) ? P(id).name : null)).filter(Boolean);
