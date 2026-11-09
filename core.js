@@ -158,6 +158,7 @@ function loadDoc(o) {
     s.pieces.forEach(p => {
       delete p.shape;
       if (p.nominal && (!Number.isFinite(p.nominal.dx) || !Number.isFinite(p.nominal.dy))) throw new Error('Position du nominal invalide.');
+      if (p.lab && (!Number.isFinite(p.lab.dx) || !Number.isFinite(p.lab.dy))) throw new Error('Position du nom de pièce invalide.');
     });
     s.surfaces.forEach(f => {
       if (f.type === 'CA') f.type = 'SC';
@@ -284,8 +285,12 @@ function nominalGeometry(p, offset = p.nominal) {
   return { x: p.x + dx, y: p.y + dy, dx, dy, r, name, fs: Math.max(1, Math.min(12, 12 * (r - 3) * 2 / Math.max(1, width))) };
 }
 /* Position du nom d'une pièce (ou d'un groupe réduit) : au centre, ou décalé à l'opposé des surfaces s'il y a chevauchement */
+function nameLines(name) { return String(name ?? '').split('\n'); }
+function nameWidth(name, font) { return Math.max(0, ...nameLines(name).map(line => textW(line, font))); }
+/* Nom déplaçable : p.lab = décalage manuel depuis le centre ; sinon placement automatique */
+function namePos(p, fs) { return p.lab ? { x: p.x + p.lab.dx, y: p.y + p.lab.dy } : nameAnchor(p, fs); }
 function nameAnchor(p, fs, name = p.name) {
-  const w = textW(name, `600 ${fs}px "Segoe UI", Arial, sans-serif`) / 2 + 3, h = fs * 0.62;
+  const w = nameWidth(name, `600 ${fs}px "Segoe UI", Arial, sans-serif`) / 2 + 3, h = fs * 0.62;
   const surfs = S().surfaces.filter(s => hostIdOf(s.pieceId) === p.id && surfVisible(s)).map(s => ({ ...soff(s), r: s.r }));
   const hits = (x, y) => surfs.some(s => {
     const cx = clampN(s.dx, x - w, x + w), cy = clampN(s.dy, y - h, y + h);

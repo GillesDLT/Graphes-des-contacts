@@ -204,7 +204,7 @@ function pieceDialog(at) {
   const num = nextNum();
   const b = el(`<div style="display:grid;grid-template-columns:1fr 150px;gap:14px">
     <div>
-      <div class="row"><label>Nom</label><input type="text" id="pdName" autofocus placeholder="ex. Arbre, Carter…" value="Pièce ${num}"></div>
+      <div class="row"><label>Nom</label><textarea id="pdName" autofocus rows="2" style="width:100%;resize:vertical" placeholder="ex. Arbre, Carter… (Entrée = nouvelle ligne)">Pièce ${num}</textarea></div>
       <div class="err" id="pdErr"></div>
       <div class="row"><label>Numéro</label><input type="number" id="pdNum" min="0" value="${num}" title="Utilisé dans la nomenclature des surfaces (ex. PL.${num}.1)"></div><div class="muted">Sert à nommer les surfaces : PL.<i>n°</i>.1 (non affiché sur la bulle)</div>
       <h4 style="margin:10px 0 4px;font-size:12px;color:#6b7280">COULEUR</h4>
@@ -212,8 +212,10 @@ function pieceDialog(at) {
     </div>
     <svg id="pdPrev" width="150" height="150" viewBox="-75 -75 150 150"></svg></div>`);
   const prev = () => {
-    const nm = $('#pdName', b).value;
-    $('#pdPrev', b).innerHTML = `<ellipse rx="60" ry="60" fill="${color}" stroke="#1a1a1a" stroke-width="2"/><text y="5" text-anchor="middle" font-size="15" font-weight="600" fill="${textOn(color)}">${esc(nm)}</text>`;
+    const lines = nameLines($('#pdName', b).value).slice(0, 5), fs = 15, lh = fs * 1.15;
+    const y0 = 5 - (lines.length - 1) * lh / 2;
+    const spans = lines.map((line, i) => `<tspan x="0" y="${r1(y0 + i * lh)}">${esc(line)}</tspan>`).join('');
+    $('#pdPrev', b).innerHTML = `<ellipse rx="60" ry="60" fill="${color}" stroke="#1a1a1a" stroke-width="2"/><text text-anchor="middle" font-size="${fs}" font-weight="600" fill="${textOn(color)}">${spans}</text>`;
   };
   $('#pdColor', b).appendChild(colorPicker(color, c => { color = c; prev(); }));
   b.addEventListener('input', prev);
@@ -328,7 +330,7 @@ function helpDialog() {
   openModal({
     title: '? Aide', noCancel: false, wide: 640, body: `
     <h4>Modélisation</h4><ul class="help-list">
-      <li>${k('P')} <b>Nouvelle pièce</b> : nom unique, numéro (pour la nomenclature des surfaces), couleur. Avec Déplacer, double-clic sur le fond = pièce à cet endroit. Poignées bleues = étirer horizontalement / verticalement (Maj = proportionnel). Le bouton <b>◯ Cercle parfait</b> du panneau de la pièce la rend circulaire en un clic.</li>
+      <li>${k('P')} <b>Nouvelle pièce</b> : nom unique, numéro (pour la nomenclature des surfaces), couleur. Avec Déplacer, double-clic sur le fond = pièce à cet endroit. Poignées bleues = étirer horizontalement / verticalement (Maj = proportionnel). Le bouton <b>◯ Cercle parfait</b> du panneau de la pièce la rend circulaire en un clic. Le <b>nom accepte les retours à la ligne</b> (champ multi-lignes à la création et dans le panneau) ; il se déplace librement en le <b>glissant</b>, et un <b>double-clic sur le nom</b> ou le bouton <b>Recentre le nom</b> le remet au centre de la pièce.</li>
       <li>Les surfaces se placent <b>automatiquement</b> le long du bord, orientées vers la pièce liée, pour limiter les croisements de liaisons. Avec Déplacer, glisser une surface la fait coulisser le long du bord et la fige ; décocher/cocher « Placement automatique » dans le panneau pour la libérer. Le type <b>SC — Surface complexe</b> remplace Came (les anciens types CA sont convertis à l'ouverture).</li>
       <li><b>Surfaces</b> : créées avec une liaison de contact ou une CF. Nomenclature automatique <i>TYPE.n°pièce.n°surface</i> (ex. PL.1.1). Le bouton <b>Surfaces</b> de la barre masque ou réaffiche leurs symboles et noms sans masquer les liaisons ; les marqueurs sont dessinés derrière les liaisons. Supprimer une surface ou son lien supprime le lien <b>et</b> ses deux surfaces (une surface de contact encore utilisée par une autre liaison est conservée).</li>
       <li>${k('L')} <b>Nouvelle liaison</b> : ${k('Ctrl')}+clic sur 2 pièces → fenêtre de création (type, répétition, surfaces, détails, schéma). Si 2 pièces sont déjà sélectionnées, ${k('L')} ouvre directement la fenêtre. Double-clic sur une pièce = démarrer une liaison depuis elle ; double-clic sur une liaison = modifier. Après validation, l'outil revient sur Déplacer.</li>

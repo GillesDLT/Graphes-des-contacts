@@ -28,7 +28,7 @@ function liaisonDialog(pidA, pidB, editId) {
     <button id="ldAdd" class="primary" style="margin-top:4px">＋ Nouvelle liaison entre ces deux pièces</button>
   </div>`);
 
-  const pieceBox = (p, id) => { const d = $(id, body); d.style.background = p.color; d.style.color = textOn(p.color); d.innerHTML = esc(p.name); };
+  const pieceBox = (p, id) => { const d = $(id, body); d.style.background = p.color; d.style.color = textOn(p.color); d.innerHTML = esc(p.name).replace(/\n/g, '<br>'); };
   const surfOptions = (p, val) => {
     const news = doc.settings.surfaceTypes.map(t => `<option value="new:${esc(t.code)}" ${val === 'new:' + t.code ? 'selected' : ''}>${esc(t.code)} — ${esc(t.label)}</option>`).join('');
     const ex = S().surfaces.filter(s => s.pieceId === p.id && !cfOfSurface(s.id)).map(s => `<option value="ex:${s.id}" ${val === 'ex:' + s.id ? 'selected' : ''}>${esc(sname(s))}</option>`).join('');

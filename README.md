@@ -22,7 +22,9 @@ projets ou comptes rendus.
 ## Ce que permet l’outil
 
 - Créer et déplacer des pièces, représentées par des ellipses ; le bouton
-  **Cercle parfait** rend une pièce circulaire en un clic.
+  **Cercle parfait** rend une pièce circulaire en un clic. Leur nom accepte les
+  **retours à la ligne**, se **déplace librement** (glisser) et se recentre par
+  double-clic ou un bouton du panneau.
 - Créer des liaisons avec leurs deux surfaces de contact.
 - Choisir les types de surfaces et de liaisons, leurs couleurs et leurs
   répétitions ; masquer ou réafficher les symboles et noms des surfaces sans
@@ -132,6 +134,11 @@ Internet**.
 Le numéro de pièce sert à nommer automatiquement les surfaces. Par exemple,
 `CY.1.1` désigne une surface cylindrique de la pièce 1. Il n’est pas affiché
 séparément sous le nom de la pièce.
+
+Le **nom de la pièce** accepte les retours à la ligne (champ multi-lignes à la
+création et dans le panneau). Il est centré automatiquement dans la pièce ; le
+glisser le déplace librement, et un **double-clic** sur le nom (ou le bouton
+**Recentre le nom** du panneau) le remet à sa place centrée.
 
 Le bouton **?** ouvre une aide plus détaillée dans l’application. Les spécifications ISO GPS peuvent recevoir des indications adjacentes non encadrées en haut à gauche du cadre ; une répétition de 1 n’affiche pas « 1x ».
 

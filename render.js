@@ -37,8 +37,11 @@ function pieceSVG(p) {
   return `<g data-id="${p.id}" data-kind="piece"><ellipse cx="${r1(p.x)}" cy="${r1(p.y)}" rx="${r1(p.rx)}" ry="${r1(p.ry)}" fill="${p.color}" stroke="${p.stroke || '#1a1a1a'}" stroke-width="2"/></g>`;
 }
 function pieceNameSVG(p) {
-  const fs = clampN(Math.min(p.rx, p.ry) / 4, 13, 24), na = nameAnchor(p, fs);
-  return `<text data-id="${p.id}" data-kind="piece" x="${r1(na.x)}" y="${r1(na.y + fs * 0.35)}" text-anchor="middle" font-size="${r1(fs)}" font-weight="600" fill="${textOn(p.color)}" stroke="${p.color}" stroke-width="3" paint-order="stroke">${esc(p.name)}</text>`;
+  const fs = clampN(Math.min(p.rx, p.ry) / 4, 13, 24), na = namePos(p, fs);
+  const lines = nameLines(p.name), lh = fs * 1.16;
+  const y0 = na.y + fs * 0.35 - (lines.length - 1) * lh / 2;
+  const spans = lines.map((line, i) => `<tspan x="${r1(na.x)}" y="${r1(y0 + i * lh)}">${esc(line)}</tspan>`).join('');
+  return `<text data-id="${p.id}" data-kind="plabel" text-anchor="middle" font-size="${r1(fs)}" font-weight="600" fill="${textOn(p.color)}" stroke="${p.color}" stroke-width="3" paint-order="stroke" style="cursor:move"><title>Glisser pour déplacer le nom — double-clic pour recentrer</title>${spans}</text>`;
 }
 function surfSVG(s) {
   const c = spos(s);

@@ -70,8 +70,9 @@ function makePptxBlob() {
     if (isHiddenPiece(p.id)) continue;
     const children = captureShapes(() => {
       addShape({ name: `Pièce ${p.num} — ${p.name}`, x: X(p.x - p.rx), y: Y(p.y - p.ry), w: D(p.rx * 2), h: D(p.ry * 2), geom: 'ellipse', fill: p.color, line: p.stroke || '#1a1a1a', lineWidth: 2 });
-      const fs = clampN(Math.min(p.rx, p.ry) / 4, 13, 24), na = nameAnchor(p, fs);
-      addText(`Nom pièce ${p.num}`, p.name, na.x, na.y, { w: Math.max(60, textW(p.name, `${fs}px Arial`) + 14), h: fs * 1.8, color: textOn(p.color), fontSize: fs, bold: true });
+      const fs = clampN(Math.min(p.rx, p.ry) / 4, 13, 24), na = namePos(p, fs);
+      const nameLinesCount = nameLines(p.name).length;
+      addText(`Nom pièce ${p.num}`, p.name, na.x, na.y, { w: Math.max(60, nameWidth(p.name, `${fs}px Arial`) + 14), h: nameLinesCount * fs * 1.45 + 6, color: textOn(p.color), fontSize: fs, bold: true });
     });
     pieceChildren.set(p.id, children);
   }

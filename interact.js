@@ -329,6 +329,12 @@ svg.addEventListener('pointerdown', e => {
     const c = membersCenter(g), lp = groupLabelPosition(g);
     drag = { type: 'glabel', g, c, grab: lp ? { x: pt.x - lp.x, y: pt.y - lp.y } : { x: 0, y: 0 }, snap: snapshot(), moved: false }; render(); return;
   }
+  if (h && h.kind === 'plabel') {
+    const p = P(h.id);
+    if (!sel.has(p.id)) { sel.clear(); sel.add(p.id); renderProps(); }
+    const fs = clampN(Math.min(p.rx, p.ry) / 4, 13, 24), np = namePos(p, fs);
+    drag = { type: 'plabel', p, grab: { x: pt.x - np.x, y: pt.y - np.y }, snap: snapshot(), moved: false }; render(); return;
+  }
   if (h && h.kind === 'handle') {
     const p = P(h.id), g = G(h.id);
     if (p) drag = { type: 'resize', p, handle: h.handle, snap: snapshot(), rx: p.rx, ry: p.ry, moved: false };
@@ -456,6 +462,11 @@ svg.addEventListener('pointermove', e => {
     }
     render(); return;
   }
+  if (drag.type === 'plabel') {
+    if (!drag.moved) { checkpoint(drag.snap); drag.moved = true; }
+    drag.p.lab = { dx: pt.x - drag.grab.x - drag.p.x, dy: pt.y - drag.grab.y - drag.p.y };
+    render(); return;
+  }
   if (drag.type === 'label') {
     const g = linkGeom(drag.l); if (!g) return;
     if (!drag.moved) { checkpoint(drag.snap); drag.moved = true; }
@@ -518,6 +529,7 @@ function onDouble(h, pt, e) {
   if (h && h.kind === 'isoSpec') return specDialog(h.id);
   if (h && h.kind === 'nominal') { checkpoint(); delete P(h.id).nominal; changed(); return; }
   if (h && h.kind === 'glabel') { const g = G(h.id); checkpoint(); g.lab = null; changed(); return; }
+  if (h && h.kind === 'plabel') { const p = P(h.id); checkpoint(); p.lab = null; changed(); return; }
   if (h && h.kind === 'group' && G(h.id).kind === 'fonc') return toggleCollapse(G(h.id));
   if (!h || (h.kind === 'group' && G(h.id).kind === 'rep')) return pieceDialog(pt);
   if (h.kind === 'piece') { setTool('liaison'); pick = [h.id]; render(); updateTip(); return; }

@@ -3,6 +3,7 @@
 const KIND_NAMES = { rep: 'Groupe de répétition', fonc: 'Groupe fonctionnel', ref: 'Système de référence' };
 const fRow = (label, inner) => `<div class="row"><label>${label}</label>${inner}</div>`;
 const fText = (k, v, ph = '') => `<input type="text" data-k="${k}" value="${esc(v)}" placeholder="${esc(ph)}">`;
+const fArea = (k, v, ph = '', rows = 2) => `<textarea data-k="${k}" rows="${rows}" style="width:100%;resize:vertical" placeholder="${esc(ph)}">${esc(v)}</textarea>`;
 const fNum = (k, v, min = 0, step = 1) => `<input type="number" data-k="${k}" data-num value="${r1(v)}" min="${min}" step="${step}">`;
 const fColor = k => `<input type="color" data-k="${k}"><button data-eye="${k}" title="Pipette écran">🎯</button><button data-cur="${k}" title="Appliquer la couleur courante">🎨</button>`;
 const fCheck = (k, v, label) => `<label><input type="checkbox" data-k="${k}" data-bool ${v ? 'checked' : ''}> ${label}</label>`;
@@ -69,12 +70,13 @@ function isoSpecPanel(sp) {
 function piecePanel(p) {
   const surfs = S().surfaces.filter(s => s.pieceId === p.id);
   return `<h3><span class="chip" style="background:${p.color};color:${textOn(p.color)}">◯</span> Pièce</h3>
-    ${fRow('Nom', fText('name', p.name))}<div class="err" id="ppErr"></div>
+    ${fRow('Nom', fArea('name', p.name, 'ex. Arbre, Carter… (Entrée = nouvelle ligne)'))}<div class="err" id="ppErr"></div>
     ${fRow('Numéro', fNum('num', p.num))}
     ${fRow('Couleur', fColor('color'))}
     ${fRow('Contour', fColor('stroke'))}
     <div class="muted">Taille : poignées bleues (Maj = garder les proportions)</div>
-    <div class="btns"><button data-pa="circle" title="Rendre la pièce circulaire en un clic (même rayon en largeur et hauteur)">◯ Cercle parfait</button>${p.nominal ? '<button data-pa="nominalauto">Réinitialiser la position du nominal 0</button>' : ''}</div>
+    <div class="btns"><button data-pa="circle" title="Rendre la pièce circulaire en un clic (même rayon en largeur et hauteur)">◯ Cercle parfait</button>${p.lab ? '<button data-pa="labauto" title="Remettre le nom à sa place automatique, centrée dans la pièce">↺ Recentre le nom</button>' : ''}${p.nominal ? '<button data-pa="nominalauto">Réinitialiser la position du nominal 0</button>' : ''}</div>
+    <p class="muted">Glisser le nom pour le déplacer ; double-clic sur le nom pour le recentrer.</p>
     <h4>Surfaces (${surfs.length})</h4>
     <div>${surfs.map(s => `<button data-goto="${s.id}" style="margin:2px">${esc(sname(s))}</button>`).join('') || '<span class="muted">aucune</span>'}</div>
     <div class="btns"><button data-pa="linkfrom">⟷ Lier à une autre pièce…</button>

@@ -128,7 +128,7 @@ function cfDialog(pidA, pidB, editId) {
       .map(s => `<option value="ex:${s.id}" ${val === 'ex:' + s.id ? 'selected' : ''}>${esc(sname(s))}</option>`).join('');
     return `<optgroup label="Nouvelle surface">${news}</optgroup>${ex ? `<optgroup label="Surfaces existantes">${ex}</optgroup>` : ''}`;
   };
-  const pieceBox = (p, id) => { const d = $(id, body); d.style.background = p.color; d.style.color = textOn(p.color); d.innerHTML = esc(p.name); };
+  const pieceBox = (p, id) => { const d = $(id, body); d.style.background = p.color; d.style.color = textOn(p.color); d.innerHTML = esc(p.name).replace(/\n/g, '<br>'); };
   const body = el(`<div style="width:560px">
     <div class="ld-head"><div class="ld-piece" id="cfA"></div><div class="ld-piece" id="cfB"></div></div>
     <div class="row"><label>Nom de la CF</label><input id="cfName" type="text" value="${esc(c ? cfName(c) : nextCFName())}" autofocus placeholder="Texte, nombre ou vide"></div>
@@ -147,8 +147,8 @@ function cfDialog(pidA, pidB, editId) {
     <p class="muted">Deux surfaces entre les deux pièces : surfaces existantes ou nouvelles. Le nom est libre et unique dans la feuille, y compris le nom vide (une seule CF sans nom). Point et normale sont affichés avec le détail des liaisons.</p>
     <div class="err" id="cfErr"></div></div>`);
   pieceBox(A, '#cfA'); pieceBox(B, '#cfB');
-  $('#cfChipA', body).style.background = A.color; $('#cfChipA', body).style.color = textOn(A.color); $('#cfChipA', body).textContent = A.name;
-  $('#cfChipB', body).style.background = B.color; $('#cfChipB', body).style.color = textOn(B.color); $('#cfChipB', body).textContent = B.name;
+  $('#cfChipA', body).style.background = A.color; $('#cfChipA', body).style.color = textOn(A.color); $('#cfChipA', body).innerHTML = esc(A.name).replace(/\n/g, '<br>');
+  $('#cfChipB', body).style.background = B.color; $('#cfChipB', body).style.color = textOn(B.color); $('#cfChipB', body).innerHTML = esc(B.name).replace(/\n/g, '<br>');
   body.addEventListener('input', e => {
     const t = e.target;
     if (t.dataset.side) {
