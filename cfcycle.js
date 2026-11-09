@@ -21,10 +21,6 @@ function setCycleVisible(c, visible) {
   c.visible = visible;
   if (visible) c.displayOrder = nextCycleDisplayOrder();
 }
-function cfCreationLayoutError(pidA, pidB) {
-  const a = { id: uid(), pieceId: pidA }, b = { id: uid(), pieceId: pidB };
-  return referenceCreationError([a, b], [{ id: uid(), kind: 'cfg', a: a.id, b: b.id }]);
-}
 const cfNameKey = name => String(name).trim().toLowerCase();
 function cfNameError(name, list = S().cfgs, exceptId) {
   if (typeof name !== 'string') return 'Le nom de la CF doit être un texte.';
@@ -56,9 +52,8 @@ function migrateCFs(s) {
     if (c.dedicated) {
       const a = s.surfaces.find(f => f.id === c.a), b = s.surfaces.find(f => f.id === c.b);
       if (!a || !b || a.pieceId === b.pieceId) throw new Error('Une CF doit avoir deux surfaces sur deux pièces différentes.');
-      if (s.liaisons.some(l => [l.a, l.b].some(id => id === c.a || id === c.b)) ||
-        s.cfgs.some(f => f.id !== c.id && [f.a, f.b].some(id => id === c.a || id === c.b)))
-        throw new Error('Une surface de CF ne peut pas être partagée avec une autre liaison ou CF.');
+      if (s.cfgs.some(f => f.id !== c.id && [f.a, f.b].some(id => id === c.a || id === c.b)))
+        throw new Error('Une surface de CF ne peut pas être partagée avec une autre CF.');
     }
     if (c.name != null && typeof c.name !== 'string') throw new Error('Le nom de la CF doit être un texte.');
     const inferred = Number(String(c.name || '').match(/\d+/)?.[0]);
@@ -89,54 +84,118 @@ function migrateCFs(s) {
     c.dedicated = true; c.color = c.color || '#b42318';
     if (c.inColor == null) c.inColor = true;
     if (typeof c.inColor !== 'boolean') throw new Error('Mode de couleur de CF invalide.');
+    const det = (c.details && typeof c.details === 'object') ? c.details : {};
+    if (det.point != null && typeof det.point !== 'string') throw new Error('Point de CF invalide.');
+    if (det.normale != null && typeof det.normale !== 'string') throw new Error('Normale de CF invalide.');
+    c.details = { point: det.point || '', normale: det.normale || '' };
     for (const key of ['loop', 'pathIdx', 'nPaths', 'showLoop']) delete c[key];
   }
 }
 
-function createCF(pidA, pidB, typeA, typeB, name = nextCFName()) {
-  const a = P(pidA), b = P(pidB);
-  if (!a || !b || a.id === b.id) throw new Error('Une CF nécessite deux pièces différentes.');
+function createCF(aId, bId, name = nextCFName(), details = {}) {
+  const sa = SF(aId), sb = SF(bId);
+  if (!sa || !sb || sa.pieceId === sb.pieceId) throw new Error('Une CF nécessite deux surfaces sur deux pièces différentes.');
   name = String(name).trim();
   const err = cfNameError(name);
   if (err) throw new Error(err);
-  const layoutError = cfCreationLayoutError(pidA, pidB);
-  if (layoutError) throw new Error(layoutError);
-  const angle = Math.atan2(b.y - a.y, b.x - a.x);
-  const sa = createSurface(a.id, typeA, null, angle), sb = createSurface(b.id, typeB, null, angle + Math.PI);
-  const c = { id: uid(), a: sa.id, b: sb.id, num: nextCFNum(), name, color: '#b42318', inColor: true, dedicated: true, labelBox: false };
+  const c = { id: uid(), a: aId, b: bId, num: nextCFNum(), name, color: '#b42318', inColor: true, dedicated: true, labelBox: false,
+    details: { point: String(details.point || '').trim(), normale: String(details.normale || '').trim() } };
   [sa, sb].forEach(s => { s.stroke = c.color; s.sw = 2; });
   S().cfgs.push(c);
   return c;
 }
+/* Détails de la CF affichés sur le graphe : point et/ou normale, comme les liaisons. */
+function cfDetailText(c) {
+  const d = c.details || {}, parts = [];
+  if (d.point) parts.push(`(${d.point})`);
+  if (d.normale) parts.push(`n(${vec(d.normale)})`);
+  return parts.join(' ');
+}
 
 function cfDialog(pidA, pidB, editId) {
-  const c = editId ? C(editId) : null, a = P(pidA), b = P(pidB);
-  if (!a || !b || a.id === b.id) return toast('Choisissez deux pièces différentes pour la CF.');
+  const c = editId ? C(editId) : null, A = P(pidA), B = P(pidB);
+  if (!A || !B || A.id === B.id) return toast('Choisissez deux pièces différentes pour la CF.');
   const sa = c && SF(c.a), sb = c && SF(c.b);
-  const options = val => doc.settings.surfaceTypes.map(t => `<option value="${esc(t.code)}" ${t.code === val ? 'selected' : ''}>${esc(t.code)} — ${esc(t.label)}</option>`).join('');
-  const body = el(`<div>
-    <p><b>${esc(a.name)}</b> ⟷ <b>${esc(b.name)}</b></p>
+  const det = Object.assign({ point: '', normale: '' }, c && c.details ? clone(c.details) : {});
+  const normMode = ['x', 'y', 'z'].includes(det.normale) ? det.normale : det.normale ? 'custom' : 'none';
+  const state = {
+    sa: sa ? 'ex:' + sa.id : 'new:PL', sb: sb ? 'ex:' + sb.id : 'new:PL',
+    countA: sa ? sa.count || 1 : 1, countB: sb ? sb.count || 1 : 1
+  };
+  const surfOptions = (p, val) => {
+    const news = doc.settings.surfaceTypes.map(t => `<option value="new:${esc(t.code)}" ${val === 'new:' + t.code ? 'selected' : ''}>${esc(t.code)} — ${esc(t.label)}</option>`).join('');
+    const ex = S().surfaces.filter(s => s.pieceId === p.id && (!cfOfSurface(s.id) || cfOfSurface(s.id).id === c?.id))
+      .map(s => `<option value="ex:${s.id}" ${val === 'ex:' + s.id ? 'selected' : ''}>${esc(sname(s))}</option>`).join('');
+    return `<optgroup label="Nouvelle surface">${news}</optgroup>${ex ? `<optgroup label="Surfaces existantes">${ex}</optgroup>` : ''}`;
+  };
+  const pieceBox = (p, id) => { const d = $(id, body); d.style.background = p.color; d.style.color = textOn(p.color); d.innerHTML = esc(p.name); };
+  const body = el(`<div style="width:560px">
+    <div class="ld-head"><div class="ld-piece" id="cfA"></div><div class="ld-piece" id="cfB"></div></div>
     <div class="row"><label>Nom de la CF</label><input id="cfName" type="text" value="${esc(c ? cfName(c) : nextCFName())}" autofocus placeholder="Texte, nombre ou vide"></div>
-    <div class="row"><label>${esc(a.name)}</label><div class="surface-choice"><select id="cfTypeA">${options(sa ? sa.type : 'PL')}</select><label class="surface-repeat" title="Répétitions de la surface A">× <input aria-label="Répétitions surface A" id="cfCountA" type="number" min="1" step="1" value="${sa ? sa.count : 1}"></label></div></div>
-    <div class="row"><label>${esc(b.name)}</label><div class="surface-choice"><select id="cfTypeB">${options(sb ? sb.type : 'PL')}</select><label class="surface-repeat" title="Répétitions de la surface B">× <input aria-label="Répétitions surface B" id="cfCountB" type="number" min="1" step="1" value="${sb ? sb.count : 1}"></label></div></div>
+    <div class="ld-grid">
+      <label><span class="chip" id="cfChipA"></span></label>
+      <div class="surface-choice"><select data-side="sa">${surfOptions(A, state.sa)}</select><label class="surface-repeat" title="Répétitions de la surface A">× <input aria-label="Répétitions surface A" type="number" min="1" step="1" data-scount="countA" value="${state.countA}"></label></div>
+      <label><span class="chip" id="cfChipB"></span></label>
+      <div class="surface-choice"><select data-side="sb">${surfOptions(B, state.sb)}</select><label class="surface-repeat" title="Répétitions de la surface B">× <input aria-label="Répétitions surface B" type="number" min="1" step="1" data-scount="countB" value="${state.countB}"></label></div>
+      <label>Détails <span class="muted">(facultatif)</span></label>
+      <div class="dets">
+        <label title="Point / centre">pt</label><input type="text" data-det="point" value="${esc(det.point)}" placeholder="—" title="Point / centre (facultatif), ex. A, O">
+        <label title="Normale">n</label><span class="vector-editor"><select id="cfNormMode" aria-label="Normale">${[['none', 'Aucune'], ['x', 'x'], ['y', 'y'], ['z', 'z'], ['custom', 'Personnalisé…']].map(([v, lab]) => `<option value="${v}" ${normMode === v ? 'selected' : ''}>${lab}</option>`).join('')}</select><input type="text" id="cfNormCustom" value="${esc(normMode === 'custom' ? det.normale : '')}" placeholder="ex. u_123, -x…" title="Un _ suivi d'un suffixe affiche ce suffixe en indice (ex. u_123)." aria-label="Normale personnalisée" ${normMode === 'custom' ? '' : 'hidden'}></span>
+      </div>
+    </div>
     <label><input id="cfLabelBox" type="checkbox" ${c?.labelBox ? 'checked' : ''}> Encadrer le libellé sur le trait</label>
-    <p class="muted">Deux surfaces propres à cette CF. Le nom est libre et unique dans la feuille, y compris le nom vide (une seule CF sans nom).</p>
+    <p class="muted">Deux surfaces entre les deux pièces : surfaces existantes ou nouvelles. Le nom est libre et unique dans la feuille, y compris le nom vide (une seule CF sans nom). Point et normale sont affichés avec le détail des liaisons.</p>
     <div class="err" id="cfErr"></div></div>`);
-  openModal({ title: c ? 'Modifier ' + cfDisplayName(c) : 'Nouvelle CF', body, okText: c ? 'Valider' : 'Créer la CF', onOk: () => {
-    const name = $('#cfName', body).value.trim(), err = cfNameError(name, S().cfgs, c && c.id);
-    if (err) { $('#cfErr', body).textContent = err; return false; }
-    const countA = Number($('#cfCountA', body).value), countB = Number($('#cfCountB', body).value);
-    if (![countA, countB].every(n => Number.isSafeInteger(n) && n > 0)) { $('#cfErr', body).textContent = 'Les répétitions doivent être des entiers positifs.'; return false; }
-    const layoutError = c ? '' : cfCreationLayoutError(a.id, b.id);
-    if (layoutError) { $('#cfErr', body).textContent = layoutError; return false; }
-    checkpoint();
-    let cf = c;
-    if (cf) { cf.name = name; sa.type = $('#cfTypeA', body).value; sb.type = $('#cfTypeB', body).value; }
-    else cf = createCF(a.id, b.id, $('#cfTypeA', body).value, $('#cfTypeB', body).value, name);
-    SF(cf.a).count = countA; SF(cf.b).count = countB;
-    cf.labelBox = $('#cfLabelBox', body).checked;
-    setTool('select'); sel.clear(); sel.add(cf.id); changed();
-  } });
+  pieceBox(A, '#cfA'); pieceBox(B, '#cfB');
+  $('#cfChipA', body).style.background = A.color; $('#cfChipA', body).style.color = textOn(A.color); $('#cfChipA', body).textContent = A.name;
+  $('#cfChipB', body).style.background = B.color; $('#cfChipB', body).style.color = textOn(B.color); $('#cfChipB', body).textContent = B.name;
+  body.addEventListener('input', e => {
+    const t = e.target;
+    if (t.dataset.side) {
+      state[t.dataset.side] = t.value;
+      const key = t.dataset.side === 'sa' ? 'countA' : 'countB';
+      state[key] = t.value.startsWith('ex:') ? SF(t.value.slice(3)).count || 1 : 1;
+      $(`[data-scount="${key}"]`, body).value = state[key];
+    }
+    if (t.dataset.scount) state[t.dataset.scount] = Number(t.value);
+    if (t.id === 'cfNormMode') { const inp = $('#cfNormCustom', body); inp.hidden = t.value !== 'custom'; if (!inp.hidden) inp.focus(); }
+  });
+  openModal({
+    title: c ? 'Modifier ' + cfDisplayName(c) : 'Nouvelle CF', body, okText: c ? 'Valider' : 'Créer la CF', wide: 610,
+    onOk: () => {
+      const name = $('#cfName', body).value.trim(), err = cfNameError(name, S().cfgs, c && c.id);
+      if (err) { $('#cfErr', body).textContent = err; return false; }
+      const countA = Number($('[data-scount="countA"]', body).value), countB = Number($('[data-scount="countB"]', body).value);
+      if (![countA, countB].every(n => Number.isSafeInteger(n) && n > 0)) { $('#cfErr', body).textContent = 'Les répétitions doivent être des entiers positifs.'; return false; }
+      const mode = $('#cfNormMode', body).value;
+      let normale = '';
+      if (mode === 'custom') {
+        normale = $('#cfNormCustom', body).value.trim();
+        if (!normale) { $('#cfNormCustom', body).classList.add('invalid'); $('#cfErr', body).textContent = 'Précisez la direction personnalisée ou choisissez x, y ou z.'; return false; }
+      } else if (mode !== 'none') normale = mode;
+      const point = $('[data-det="point"]', body).value.trim();
+      if (state.sa.startsWith('ex:') && state.sa === state.sb) { $('#cfErr', body).textContent = 'Les deux extrémités ne peuvent pas utiliser la même surface.'; return false; }
+      const plannedSurfaces = [];
+      const surface = (val, p) => {
+        if (val.startsWith('ex:')) return val.slice(3);
+        const f = { id: uid(), pieceId: p.id }; plannedSurfaces.push(f); return f.id;
+      };
+      const plannedLinks = [{ id: c ? c.id : uid(), kind: 'cfg', a: surface(state.sa, A), b: surface(state.sb, B) }];
+      const layoutError = referenceCreationError(plannedSurfaces, plannedLinks, c ? [c.id] : []);
+      if (layoutError) { $('#cfErr', body).textContent = layoutError; return false; }
+      checkpoint();
+      const angAB = Math.atan2(B.y - A.y, B.x - A.x);
+      const resolve = (val, p, ang) => val.startsWith('ex:') ? val.slice(3) : createSurface(p.id, val.slice(4), null, ang).id;
+      const aId = resolve(state.sa, A, angAB), bId = resolve(state.sb, B, angAB + Math.PI);
+      SF(aId).count = countA; SF(bId).count = countB;
+      let cf = c;
+      if (cf) Object.assign(cf, { a: aId, b: bId, name, details: { point, normale } });
+      else cf = createCF(aId, bId, name, { point, normale });
+      cf.labelBox = $('#cfLabelBox', body).checked;
+      cleanupOrphans();
+      setTool('select'); sel.clear(); sel.add(cf.id); changed(); updateTip();
+    }
+  });
 }
 function cfListPanel() {
   const cs = S().cfgs;
@@ -159,7 +218,7 @@ function cfListAction(action, id) {
   }
   if (action === 'properties' && c) { setTool('select'); sel.clear(); sel.add(c.id); changed(); return; }
   if (action === 'edit' && c) return cfDialog(SF(c.a).pieceId, SF(c.b).pieceId, c.id);
-  if (action === 'delete' && c) return askConfirm('Supprimer la CF', `Supprimer « ${esc(cfDisplayName(c))} », ses deux surfaces et les cycles associés ?`, () => {
+  if (action === 'delete' && c) return askConfirm('Supprimer la CF', `Supprimer « ${esc(cfDisplayName(c))} », ses surfaces devenues inutiles et les cycles associés ?`, () => {
     checkpoint(); deleteIds([c.id]); sel.clear(); changed();
   });
 }

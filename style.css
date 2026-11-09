@@ -152,6 +152,11 @@ main { flex: 1; display: flex; min-height: 0; }
 .vector-editor select { max-width: 130px; }
 .vector-editor input { width: 92px; }
 
+/* grille des valeurs de torseur dans le panneau de liaison */
+.torsor-grid { display: grid; grid-template-columns: 18px 1fr 18px 1fr; gap: 4px 6px; align-items: center; margin: 4px 0; }
+.torsor-grid label { text-align: center; color: #4b5563; font-weight: 600; }
+.torsor-grid input { width: 100%; min-width: 0; }
+
 /* Police technique ISO 3098 — osifont (LGPL3 + exception de police, voir fonts/LICENSE) */
 @font-face {
   font-family: 'osifont';

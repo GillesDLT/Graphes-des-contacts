@@ -53,8 +53,7 @@ function surfSVG(s) {
   const stroke = cf?.inColor === false ? '#000000' : marked ? cycleColor : s.stroke;
   const tc = cf?.inColor === false ? '#000000' : marked ? cycleColor : lum(s.color) < 0.2 ? '#ffffff' : '#1f3b70';
   return `<g data-id="${s.id}" data-kind="surface">${cf ? `<title>Surface de ${esc(cfDisplayName(cf))}</title>` : ''}<circle cx="${r1(c.x)}" cy="${r1(c.y)}" r="${s.r}" fill="${s.color}" stroke="${stroke}" stroke-width="${marked ? 2.2 : s.sw}"${marked ? ' stroke-dasharray="6 4"' : ''}/>` +
-    `<text x="${r1(c.x)}" y="${r1(c.y + (s.count > 1 ? -3 : SURF_FONT * 0.35))}" text-anchor="middle" font-size="${SURF_FONT}" fill="${tc}">${s.count > 1 ? `<tspan x="${r1(c.x)}">${s.count}x</tspan><tspan x="${r1(c.x)}" dy="15">${esc(name)}</tspan>` : esc(name)}</text>` +
-    (s.pinned ? `<circle cx="${r1(c.x + s.r * 0.72)}" cy="${r1(c.y - s.r * 0.72)}" r="3.2" fill="#2b5fd9" stroke="#fff" stroke-width="1" data-pin="1"/>` : '') + `</g>`;
+    `<text x="${r1(c.x)}" y="${r1(c.y + (s.count > 1 ? -3 : SURF_FONT * 0.35))}" text-anchor="middle" font-size="${SURF_FONT}" fill="${tc}">${s.count > 1 ? `<tspan x="${r1(c.x)}">${s.count}x</tspan><tspan x="${r1(c.x)}" dy="15">${esc(name)}</tspan>` : esc(name)}</text></g>`;
 }
 function linkGeom(l) {
   const sa = SF(l.a), sb = SF(l.b); if (!sa || !sb) return null;
@@ -181,7 +180,17 @@ function cfgSVG(c) {
     `<path d="${linkPath(g)}" fill="none" stroke="${color}" stroke-width="2.5"/>` +
     `<path d="${linkPath(g)}" fill="none" stroke="transparent" stroke-width="12"/>` +
     (cfName(c) ? (c.labelBox ? `<rect data-cf-label-box="${c.id}" x="${r1(label.x - half)}" y="${r1(label.y - 11)}" width="${r1(half * 2)}" height="22" rx="2" fill="white" stroke="${color}" stroke-width="1.3"/>` : '') +
-      `<text x="${r1(label.x)}" y="${r1(label.y + (c.labelBox ? 4 : -8))}" text-anchor="middle" font-size="13" font-weight="700" fill="${color}" stroke="#fff" stroke-width="3" paint-order="stroke">${esc(cfName(c))}</text>` : '') + '</g>';
+      `<text x="${r1(label.x)}" y="${r1(label.y + (c.labelBox ? 4 : -8))}" text-anchor="middle" font-size="13" font-weight="700" fill="${color}" stroke="#fff" stroke-width="3" paint-order="stroke">${esc(cfName(c))}</text>` : '') +
+    (doc.settings.showDetails && cfDetailText(c) ? richTextSVG(cfDetailText(c), label.x, label.y + (c.labelBox ? 21 : 8), 11, `data-id="${c.id}" data-kind="cfg"`, color) : '') + '</g>';
+}
+/* Torseurs sous les traits de liaisons (bouton « Torseurs » de la barre) */
+function torseursSVG(links) {
+  if (!doc.settings.showTorseurs) return '';
+  return links.map(l => {
+    const g = linkGeom(l); if (!g) return '';
+    const p = g.point(l.t ?? 0.5);
+    return torseurSVG(l, p.x, p.y + 14);
+  }).join('');
 }
 function nominalSVG(bubbles = false) {
   if (!(S().showNominalZero ?? doc.settings.showNominalZero)) return '';
@@ -275,6 +284,7 @@ function render() {
   $('#l-cycle-internal').innerHTML = cycleInternalSVG(visibleCycles);
   const vis = s.liaisons.filter(liaisonVisible);
   $('#l-links').innerHTML = vis.map(linkLineSVG).join('');
+  $('#l-torseurs').innerHTML = torseursSVG(vis);
   $('#l-surfaces').innerHTML = s.surfaces.filter(surfVisible).map(surfSVG).join('');
   $('#l-cfg').innerHTML = s.cfgs.map(cfgSVG).join('');
   $('#l-piece-labels').innerHTML = s.pieces.filter(p => !isHiddenPiece(p.id)).map(pieceNameSVG).join('');
@@ -292,6 +302,7 @@ function render() {
   surfacesButton.classList.toggle('active', doc.settings.showSurfaces !== false);
   surfacesButton.setAttribute('aria-pressed', String(doc.settings.showSurfaces !== false));
   $('[data-act=grid]').classList.toggle('active', !!doc.settings.grid);
+  $('[data-act=torseurs]').classList.toggle('active', !!doc.settings.showTorseurs);
   $('[data-act=nominal0]').classList.toggle('active', !!(s.showNominalZero ?? doc.settings.showNominalZero));
   stage.className = stage.className.replace(/\bt-\w+/g, '').trim() + ' t-' + tool;
 }
@@ -421,7 +432,7 @@ const TIPS = {
   rep: '<b>Ctrl + clic</b> sur les pièces répétées ; <b>clic sur une surface de CF</b> pour inclure / retirer sa CF entière — <b>Entrée</b> pour valider',
   fonc: '<b>Ctrl + clic</b> sur les pièces ; <b>clic sur un titre de répétition visible</b> pour l’inclure / le retirer du contour, sans ajouter ses pièces — <b>Entrée</b> pour valider',
   ref: '<b>Ctrl + clic</b> sur les surfaces du système de référence — <b>Entrée</b> pour valider',
-  cfg: '<b>Clic</b> sur 2 pièces pour créer une CF avec deux nouvelles surfaces et un nom libre unique',
+  cfg: '<b>Clic</b> sur 2 pièces pour créer une CF avec un nom libre unique ; chaque extrémité utilise une surface existante ou une nouvelle surface, avec un point et une normale facultatifs',
   cycle: '<b>Clic ou Ctrl+clic</b> sur une surface de CF, puis les surfaces ou références — finir sur l’autre surface de la même CF. <b>Ctrl+clic sur la dernière étape</b> : retirer',
   pipette: '<b>Clic</b> sur un élément pour prélever sa couleur',
   paint: '<b>Clic</b> sur un élément pour lui appliquer la couleur courante',

@@ -56,6 +56,7 @@
     <button data-act="grid" title="Afficher / masquer la grille">#</button>
     <button data-act="surfaces" title="Afficher / masquer les symboles et noms des surfaces (les liaisons restent visibles)" aria-pressed="true">Surfaces</button>
     <button data-act="details" title="Afficher le détail des liaisons (axe, normale…) sur le graphe">n(<span class="vec">z</span>)</button>
+    <button data-act="torseurs" title="Afficher / masquer les torseurs des actions transmissibles sous les liaisons">Torseurs</button>
     <button data-act="nominal0" title="Afficher / cacher les nominaux n° de pièce . 0 reliés à toutes les surfaces">Nominal 0</button>
     <button data-act="referenceimage" title="Choisir une image locale temporaire">Image de référence</button>
     <button data-act="settings" title="Paramètres (types de surfaces / liaisons)">Paramètres</button>
@@ -75,6 +76,7 @@
           <g id="l-cycle-internal"></g>
           <g id="l-surfaces"></g>
           <g id="l-links"></g>
+          <g id="l-torseurs"></g>
           <g id="l-cfg"></g>
           <g id="l-piece-labels"></g>
           <g id="l-labels"></g>
@@ -108,6 +110,7 @@
 <script src="metaball.js"></script>
 <script src="symbols.js"></script>
 <script src="cfcycle.js"></script>
+<script src="torseur.js"></script>
 <script src="render.js"></script>
 <script src="specifications.js"></script>
 <script src="dialogs.js"></script>

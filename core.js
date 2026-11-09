@@ -57,6 +57,7 @@ const DEFAULT_SETTINGS = {
   ],
   showDetails: false,
   showSurfaces: true,
+  showTorseurs: false,
   showIsoRefs: true,
   showSpecs: true,
   showNominalZero: false,

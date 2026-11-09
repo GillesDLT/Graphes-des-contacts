@@ -522,6 +522,7 @@ function onDouble(h, pt, e) {
   if (!h || (h.kind === 'group' && G(h.id).kind === 'rep')) return pieceDialog(pt);
   if (h.kind === 'piece') { setTool('liaison'); pick = [h.id]; render(); updateTip(); return; }
   if (h.kind === 'liaison' || h.kind === 'llabel') { const l = L(h.id); return liaisonDialog(SF(l.a).pieceId, SF(l.b).pieceId, l.id); }
+  if (h.kind === 'torseur') { const l = L(h.id); return l ? liaisonDialog(SF(l.a).pieceId, SF(l.b).pieceId, l.id) : null; }
   if (h.kind === 'cfg') { const c = C(h.id); return cfDialog(SF(c.a).pieceId, SF(c.b).pieceId, c.id); }
   if (h.kind === 'group' || h.kind === 'cfg' || h.kind === 'surface') { const i = $('#props [data-k=name]'); if (i) { i.focus(); i.select(); } }
 }
@@ -628,6 +629,7 @@ async function toolbarAction(a) {
     case 'grid': doc.settings.grid = !doc.settings.grid; changed(false); break;
     case 'surfaces': doc.settings.showSurfaces = doc.settings.showSurfaces === false; changed(false); break;
     case 'details': checkpoint(); doc.settings.showDetails = !doc.settings.showDetails; changed(); break;
+    case 'torseurs': checkpoint(); doc.settings.showTorseurs = !doc.settings.showTorseurs; changed(); break;
     case 'nominal0': {
       checkpoint();
       const visible = !(S().showNominalZero ?? doc.settings.showNominalZero);

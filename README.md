@@ -21,7 +21,8 @@ projets ou comptes rendus.
 
 ## Ce que permet l’outil
 
-- Créer et déplacer des pièces, représentées par des ellipses.
+- Créer et déplacer des pièces, représentées par des ellipses ; le bouton
+  **Cercle parfait** rend une pièce circulaire en un clic.
 - Créer des liaisons avec leurs deux surfaces de contact.
 - Choisir les types de surfaces et de liaisons, leurs couleurs et leurs
   répétitions ; masquer ou réafficher les symboles et noms des surfaces sans
@@ -31,8 +32,11 @@ projets ou comptes rendus.
 - Organiser l’assemblage avec des groupes fonctionnels, des répétitions et des
   systèmes de référence.
 - Réduire un groupe fonctionnel à une bulle pour simplifier la lecture.
-- Créer des **CF — conditions fonctionnelles**, avec deux surfaces propres et un
-  nom libre.
+- Créer des **CF — conditions fonctionnelles**, avec un nom libre, des surfaces
+  existantes ou nouvelles et, si besoin, un point et une normale.
+- Afficher sous chaque liaison son **torseur des actions transmissibles**
+  {T<sub>n1/n2</sub>}<sub>A/R</sub> = {X L ; Y M ; Z N}<sub>A/R</sub>, avec des
+  valeurs par défaut cohérentes avec l’axe choisi, modifiables une par une.
 - Annoter le graphe avec **ISO GPS** : références ISO (carré ou cercle partiel,
   rappel à coude) et **spécifications** — des cadres de tolérance ISO 1101 avec
   symboles de caractéristique, indications, indicateurs (Ⓜ maxi matière,
@@ -153,15 +157,33 @@ fonctionnels permettent de les réduire ou de les développer.
 
 ### Créer une CF
 
-1. Cliquer sur **CF**, puis sur deux pièces différentes.
-2. Choisir les types des deux nouvelles surfaces.
+1. Cliquer sur **CF**, puis sur deux pièces différentes. Les couleurs des deux
+   pièces sont affichées dans la fenêtre.
+2. Pour chaque extrémité, choisir une **surface existante** de la pièce ou une
+   nouvelle surface (type + nombre de répétitions).
 3. Saisir un nom : texte, nombre ou vide. Il doit être unique dans la feuille ;
    une seule CF sans nom est autorisée.
-4. Valider.
+4. Ajouter si besoin un **point** (ex. A, O) et une **normale** (`x`, `y`, `z`
+   ou une direction personnalisée comme `u_123`). Ces détails s’affichent sur le
+   graphe avec le détail des liaisons.
+5. Valider.
+
+Une surface existante peut être partagée avec une liaison, mais jamais entre
+deux CF. Supprimer une CF supprime ses surfaces devenues inutiles.
 
 Le panneau **CF** liste toutes les conditions fonctionnelles de la feuille.
 Il permet de les afficher en noir ou dans leur couleur, individuellement ou
 toutes ensemble, sans effacer leur couleur enregistrée.
+
+### Torseurs
+
+Le bouton **Torseurs** de la barre affiche ou masque, sous chaque liaison, son
+torseur des actions transmissibles. Les lignes sont les axes x, y, z ; la
+première colonne donne les efforts (X, Y, Z) et la seconde les moments
+(L, M, N). Les valeurs par défaut suivent le type de liaison et son axe ou sa
+normale (ex. Pivot sur x → L = 0, Appui plan de normale z → Z = N = 0) et
+chaque valeur se modifie dans le panneau de la liaison, avec un retour aux
+valeurs par défaut en un clic.
 
 ### Compter les cycles
 

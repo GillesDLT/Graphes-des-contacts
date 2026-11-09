@@ -36,7 +36,7 @@ function emptyPanel() {
       <li>${k('P')} <b>Nouvelle pièce</b> (ou double-clic sur le fond avec Déplacer)</li>
       <li>${k('L')} <b>Nouvelle liaison</b> : ${k('Ctrl')}+clic sur 2 pièces (les surfaces sont créées avec la liaison)</li>
       <li>${k('R')} / ${k('G')} / ${k('T')} : ${k('Ctrl')}+clic sur les pièces (ou surfaces) puis ${k('Entrée')}</li>
-      <li>${k('C')} : créer une CF entre deux pièces (deux nouvelles surfaces)</li>
+      <li>${k('C')} : créer une CF entre deux pièces (surfaces existantes ou nouvelles, point et normale facultatifs)</li>
       <li>${k('Y')} : créer et afficher / cacher les cycles, ou les extraire en feuilles</li>
       <li><b>Nominal 0</b> : afficher / cacher les bulles n° de pièce . 0 reliées à toutes les surfaces</li>
     </ol>
@@ -74,7 +74,7 @@ function piecePanel(p) {
     ${fRow('Couleur', fColor('color'))}
     ${fRow('Contour', fColor('stroke'))}
     <div class="muted">Taille : poignées bleues (Maj = garder les proportions)</div>
-    ${p.nominal ? '<div class="btns"><button data-pa="nominalauto">Réinitialiser la position du nominal 0</button></div>' : ''}
+    <div class="btns"><button data-pa="circle" title="Rendre la pièce circulaire en un clic (même rayon en largeur et hauteur)">◯ Cercle parfait</button>${p.nominal ? '<button data-pa="nominalauto">Réinitialiser la position du nominal 0</button>' : ''}</div>
     <h4>Surfaces (${surfs.length})</h4>
     <div>${surfs.map(s => `<button data-goto="${s.id}" style="margin:2px">${esc(sname(s))}</button>`).join('') || '<span class="muted">aucune</span>'}</div>
     <div class="btns"><button data-pa="linkfrom">⟷ Lier à une autre pièce…</button>
@@ -92,7 +92,7 @@ function surfPanel(s) {
     ${fRow('Couleur', fColor('color'))}
     ${fRow('Contour', fColor('stroke'))}
     ${fRow('Placement', fCheck('auto', !s.pinned, 'Automatique (suit les liaisons)'))}
-    ${cf ? `<h4>Surface de ${esc(cfDisplayName(cf))}</h4><button data-goto="${cf.id}">Modifier ${esc(cfDisplayName(cf))}</button><p class="muted">Supprimer cette surface supprime sa CF et l’autre surface de la CF, ainsi que les cycles associés.</p>` : ''}
+    ${cf ? `<h4>Surface de ${esc(cfDisplayName(cf))}</h4><button data-goto="${cf.id}">Modifier ${esc(cfDisplayName(cf))}</button><p class="muted">Supprimer cette surface supprime ses liaisons et sa CF, ainsi que les cycles associés ; l’autre surface de la CF est supprimée seulement si elle devient inutile.</p>` : ''}
     <h4>Liaisons (${ls.length})</h4>
     <div>${ls.map(l => `<button data-goto="${l.id}" style="margin:2px">${esc(liaisonLabel(l))}</button>`).join('') || '<span class="muted">aucune</span>'}</div>
     <div class="btns"><button data-pa="del" class="danger" title="Supprime aussi les liens et les cycles qui dépendent de cette surface">🗑 Supprimer ${cf ? '(avec sa CF)' : '(avec ses liaisons)'}</button></div>`;
@@ -108,7 +108,17 @@ function linkPanel(l) {
     ${fRow('Position libellé', `<input type="range" min="0.1" max="0.9" step="0.05" data-k="t" data-num value="${l.t ?? 0.5}">`)}
     ${fRow('Couleur trait', fColor('color'))}
     ${curveFields(l)}
+    ${torseurFields(l)}
     <div class="btns"><button data-goto="${sa.id}">${esc(sname(sa))}</button><button data-goto="${sb.id}">${esc(sname(sb))}</button><button data-pa="del" class="danger" title="Supprime la liaison et ses 2 surfaces">🗑 Supprimer (avec ses surfaces)</button></div>`;
+}
+function torseurFields(l) {
+  const v = torseurValues(l);
+  return `<h4>Torseur <span class="muted">{T_${esc(torseurTitle(l))}}_{${esc(torseurPoint(l))}/R}</span></h4>
+    <div class="torsor-grid">${[['X', 'L'], ['Y', 'M'], ['Z', 'N']].map(([a, b]) =>
+      `<label>${a}</label><input type="text" data-torsor="${a}" value="${esc(v[a])}" aria-label="Composante ${a}">` +
+      `<label>${b}</label><input type="text" data-torsor="${b}" value="${esc(v[b])}" aria-label="Composante ${b}">`).join('')}</div>
+    <div class="btns"><button data-pa="torsorreset">↺ Valeurs par défaut</button></div>
+    <p class="muted">S’affiche sous la liaison avec le bouton <b>Torseurs</b>. Lignes = axes x, y, z ; colonne 1 = efforts (X, Y, Z), colonne 2 = moments (L, M, N). Les valeurs par défaut suivent le type de liaison et son axe / normale ; chaque valeur est modifiable ici.</p>`;
 }
 function groupPanel(g) {
   const memb = g.members.map(id => g.kind === 'ref' ? (SF(id) ? sname(SF(id)) : null) : (P(id) ? P(id).name : null)).filter(Boolean);
@@ -140,7 +150,7 @@ function cfgPanel(c) {
     ${fRow('Affichage', fCheck('inColor', c.inColor !== false, 'Dans sa couleur (sinon noir)'))}
     ${curveFields(c)}
     ${fRow('Libellé', fCheck('labelBox', !!c.labelBox, 'Encadrer le texte sur le trait'))}
-    <p class="muted">Deux surfaces propres à cette CF, sans surlignage automatique des liaisons.</p>
+    <p class="muted">Deux surfaces de cette CF (existantes ou nouvelles), sans surlignage automatique des liaisons. Point et normale facultatifs dans « Modifier les surfaces… ».</p>
     <div class="btns"><button data-goto="${c.a}">${esc(endName(c.a))}</button><button data-goto="${c.b}">${esc(endName(c.b))}</button></div>
     <div class="btns"><button data-pa="editcf">Modifier les surfaces…</button><button data-pa="cfs">Gérer toutes les CF</button><button data-pa="cycles">Gérer les cycles</button><button data-pa="del" class="danger">Supprimer la CF et ses surfaces</button></div>`;
 }
@@ -235,6 +245,16 @@ function wireProps(box, target) {
     if (kindOf(target.id) === 'cfg' && k === 'color') setCFColor(target, c); else target[k] = c;
     changed();
   };
+  let tcp = false;
+  $$('[data-torsor]', box).forEach(inp => {
+    inp.addEventListener('focus', () => tcp = false);
+    inp.addEventListener('input', () => {
+      if (!target || kindOf(target.id) !== 'liaison') return;
+      if (!tcp) { checkpoint(); tcp = true; }
+      target.torsor = Object.assign({}, target.torsor, { [inp.dataset.torsor]: inp.value });
+      render(); autosave();
+    });
+  });
   $$('[data-eye]', box).forEach(b => b.onclick = async () => setColor(b.dataset.eye, await eyeDrop()));
   $$('[data-cur]', box).forEach(b => b.onclick = () => setColor(b.dataset.cur, $('#curColor').value));
   $$('[data-goto]', box).forEach(b => b.onclick = () => { sel.clear(); sel.add(b.dataset.goto); changed(); });
@@ -263,6 +283,8 @@ function propAction(a, t, btn) {
     case 'cycles': setTool('cycle'); break;
     case 'cfs': setTool('cfg'); break;
     case 'straight': checkpoint(); t.curved = false; t.bend = 0; changed(); break;
+    case 'circle': checkpoint(); { const r = Math.round((t.rx + t.ry) / 2); t.rx = r; t.ry = r; } changed(); break;
+    case 'torsorreset': checkpoint(); delete t.torsor; changed(); break;
     case 'nominalauto': checkpoint(); delete t.nominal; changed(); break;
     case 'multicolor': {
       const c = $('#multiColor').value; checkpoint();
