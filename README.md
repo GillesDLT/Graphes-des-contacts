@@ -35,7 +35,7 @@ projets ou comptes rendus.
 - Créer des **CF — conditions fonctionnelles**, avec un nom libre, des surfaces
   existantes ou nouvelles et, si besoin, un point et une normale.
 - Afficher sous chaque liaison son **torseur des actions transmissibles**
-  {T<sub>n1/n2</sub>}<sub>A/R</sub> = {X L ; Y M ; Z N}<sub>A/R</sub>, avec des
+  {T<sub>n1/n2</sub>}<sub>A</sub> = {X L ; Y M ; Z N}<sub>A</sub>, avec des
   valeurs par défaut cohérentes avec l’axe choisi, modifiables une par une.
 - Annoter le graphe avec **ISO GPS** : références ISO (carré ou cercle partiel,
   rappel à coude) et **spécifications** — des cadres de tolérance ISO 1101 avec
@@ -183,7 +183,8 @@ première colonne donne les efforts (X, Y, Z) et la seconde les moments
 (L, M, N). Les valeurs par défaut suivent le type de liaison et son axe ou sa
 normale (ex. Pivot sur x → L = 0, Appui plan de normale z → Z = N = 0) et
 chaque valeur se modifie dans le panneau de la liaison, avec un retour aux
-valeurs par défaut en un clic.
+valeurs par défaut en un clic. Le **point d’application** (A par défaut) se
+modifie à côté des valeurs, dans le même panneau.
 
 ### Compter les cycles
 

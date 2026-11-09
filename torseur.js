@@ -1,7 +1,7 @@
 'use strict';
 /* ===== Torseurs des liaisons =====
    Sous chaque liaison, le torseur des actions transmissibles
-   {T_{n1/n2}}_{A/R} = { X L / Y M / Z N }_{A/R}
+   {T_{n1/n2}}_{A} = { X L / Y M / Z N }_{A}
    Lignes = axes x, y, z ; colonne 1 = efforts (X, Y, Z), colonne 2 = moments (L, M, N).
    Les valeurs par défaut découlent du type de liaison et de son axe / normale choisis ;
    chaque valeur reste modifiable dans le panneau de la liaison. */
@@ -75,9 +75,9 @@ const bracePath = (x, y0, h, dir) => {
     `C${dx(-1)},${f(y0 + h * 0.51)} ${dx(0)},${f(y0 + h * 0.53)} ${dx(0)},${f(y0 + h * 0.6)}` +
     `C${dx(0)},${f(y0 + h * 0.84)} ${dx(1)},${f(y0 + h)} ${dx(5)},${f(y0 + h)}`;
 };
-/* Bloc centré sous le point (x, y) : préfixe {T_{n1/n2}}_{A/R} =, accolade, grille 3×2, accolade, indice A/R */
+/* Bloc centré sous le point (x, y) : préfixe {T_{n1/n2}}_{A} =, accolade, grille 3×2, accolade, indice A */
 function torseurSVG(l, x, y) {
-  const v = torseurValues(l), sub = `${torseurPoint(l)}/R`, title = torseurTitle(l);
+  const v = torseurValues(l), sub = torseurPoint(l), title = torseurTitle(l);
   const fs = 12, sfs = 8, rh = 13;
   const F = `${fs}px "Segoe UI", Arial, sans-serif`, FI = `italic ${fs}px "Segoe UI", Arial, sans-serif`, FS = `${sfs}px "Segoe UI", Arial, sans-serif`;
   const cells = [[v.X, v.L], [v.Y, v.M], [v.Z, v.N]];

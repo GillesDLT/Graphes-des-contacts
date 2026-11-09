@@ -113,12 +113,13 @@ function linkPanel(l) {
 }
 function torseurFields(l) {
   const v = torseurValues(l);
-  return `<h4>Torseur <span class="muted">{T_${esc(torseurTitle(l))}}_{${esc(torseurPoint(l))}/R}</span></h4>
+  return `<h4>Torseur <span class="muted">{T_${esc(torseurTitle(l))}}_{${esc(torseurPoint(l))}}</span></h4>
+    ${fRow('Point', fText('point', (l.details && l.details.point) || '', 'A (défaut)'))}
     <div class="torsor-grid">${[['X', 'L'], ['Y', 'M'], ['Z', 'N']].map(([a, b]) =>
       `<label>${a}</label><input type="text" data-torsor="${a}" value="${esc(v[a])}" aria-label="Composante ${a}">` +
       `<label>${b}</label><input type="text" data-torsor="${b}" value="${esc(v[b])}" aria-label="Composante ${b}">`).join('')}</div>
     <div class="btns"><button data-pa="torsorreset">↺ Valeurs par défaut</button></div>
-    <p class="muted">S’affiche sous la liaison avec le bouton <b>Torseurs</b>. Lignes = axes x, y, z ; colonne 1 = efforts (X, Y, Z), colonne 2 = moments (L, M, N). Les valeurs par défaut suivent le type de liaison et son axe / normale ; chaque valeur est modifiable ici.</p>`;
+    <p class="muted">S’affiche sous la liaison avec le bouton <b>Torseurs</b>. Lignes = axes x, y, z ; colonne 1 = efforts (X, Y, Z), colonne 2 = moments (L, M, N). Le point ci-dessus est son point d’application (A par défaut). Les valeurs par défaut suivent le type de liaison et son axe / normale ; chaque valeur est modifiable ici.</p>`;
 }
 function groupPanel(g) {
   const memb = g.members.map(id => g.kind === 'ref' ? (SF(id) ? sname(SF(id)) : null) : (P(id) ? P(id).name : null)).filter(Boolean);
@@ -200,6 +201,7 @@ function applyField(target, inp) {
     if (k === 'num') { v = Math.round(v); if (numUsed(v, target.id)) { inp.classList.add('invalid'); $('#ppErr').textContent = 'Numéro déjà utilisé'; return false; } inp.classList.remove('invalid'); $('#ppErr').textContent = ''; }
   }
   if (kd === 'surface' && k === 'idx') v = Math.max(1, Math.round(v));
+  if (kd === 'liaison' && k === 'point') { target.details = Object.assign({}, target.details, { point: v.trim() }); return true; }
   if (kd === 'surface' && k === 'auto') { target.pinned = !v; return true; }
   if (kd === 'liaison' && k === 'count') v = Math.max(1, Math.round(v));
   if (kd === 'group' && k === 'count') v = Math.max(2, Math.round(v));
@@ -229,7 +231,7 @@ function wireProps(box, target) {
   let cp = false;
   $$('[data-k]', box).forEach(inp => {
     inp.addEventListener('focus', () => cp = false);
-    inp.addEventListener('change', () => { cp = false; if (target && ['type', 'auto', 'count', 'curved', 'inColor'].includes(inp.dataset.k)) renderProps(); });
+    inp.addEventListener('change', () => { cp = false; if (target && ['type', 'auto', 'count', 'curved', 'inColor', 'point'].includes(inp.dataset.k)) renderProps(); });
     inp.addEventListener('input', () => {
       if (!target) return;
       if (!cp) { checkpoint(); cp = true; }
