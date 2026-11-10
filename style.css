@@ -93,6 +93,7 @@ main { flex: 1; display: flex; min-height: 0; }
 .surface-choice select { flex: 1; min-width: 0; width: 0; }
 .surface-repeat { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; }
 .surface-repeat input[type=number] { width: 48px; flex: none; }
+.surface-name { flex: 0 1 150px; min-width: 90px; }
 .btns { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
 .muted { color: #6b7280; font-size: 12px; }
 .kbd { display: inline-block; border: 1px solid #c9ced8; border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; font-size: 11px; background: #f7f8fa; }

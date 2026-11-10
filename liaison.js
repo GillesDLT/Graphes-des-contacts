@@ -9,12 +9,12 @@ function liaisonDialog(pidA, pidB, editId) {
   const defDetails = code => ({ point: ['ROT', 'RD', 'LA'].includes(ltype(code).symbol) ? 'O' : 'A', axe: 'x', normale: 'z', pas: '' });
   const newCard = (code = 'PG') => {
     const t = ltype(code);
-    return { editId: null, type: code, count: 1, countA: 1, countB: 1, sa: 'new:' + t.sA, sb: 'new:' + t.sB, touchedA: false, touchedB: false, details: defDetails(code) };
+    return { editId: null, type: code, count: 1, countA: 1, countB: 1, sa: 'new:' + t.sA, sb: 'new:' + t.sB, touchedA: false, touchedB: false, nameA: '', nameB: '', details: defDetails(code) };
   };
   const cardFromLiaison = l => {
     const sa = SF(l.a), sb = SF(l.b);
     const onA = sa.pieceId === A.id;
-    return { editId: l.id, type: l.type, count: l.count, countA: (onA ? sa : sb).count || 1, countB: (onA ? sb : sa).count || 1, sa: 'ex:' + (onA ? sa.id : sb.id), sb: 'ex:' + (onA ? sb.id : sa.id), touchedA: true, touchedB: true, details: Object.assign(defDetails(l.type), clone(l.details || {})) };
+    return { editId: l.id, type: l.type, count: l.count, countA: (onA ? sa : sb).count || 1, countB: (onA ? sb : sa).count || 1, sa: 'ex:' + (onA ? sa.id : sb.id), sb: 'ex:' + (onA ? sb.id : sa.id), touchedA: true, touchedB: true, nameA: '', nameB: '', details: Object.assign(defDetails(l.type), clone(l.details || {})) };
   };
   const between = () => S().liaisons.filter(l => { const a = SF(l.a), b = SF(l.b); if (!a || !b) return false; return (a.pieceId === A.id && b.pieceId === B.id) || (a.pieceId === B.id && b.pieceId === A.id); });
 
@@ -38,11 +38,12 @@ function liaisonDialog(pidA, pidB, editId) {
   const plannedNames = () => {
     const cnt = { [A.id]: 0, [B.id]: 0 };
     return cards.map(c => {
-      const nm = (val, p) => {
+      const nm = (val, p, custom) => {
         if (val.startsWith('ex:')) { const s = SF(val.slice(3)); return s ? sname(s) : '?'; }
-        cnt[p.id]++; return `${val.slice(4)}.${p.num}.${nextSurfIdx(p.id) + cnt[p.id] - 1}`;
+        cnt[p.id]++;
+        return String(custom || '').trim() || `${val.slice(4)}.${p.num}.${nextSurfIdx(p.id) + cnt[p.id] - 1}`;
       };
-      return [nm(c.sa, A), nm(c.sb, B)];
+      return [nm(c.sa, A, c.nameA), nm(c.sb, B, c.nameB)];
     });
   };
 
@@ -73,8 +74,8 @@ function liaisonDialog(pidA, pidB, editId) {
         <div class="ld-types">${doc.settings.liaisonTypes.map(x => `<button data-type="${esc(x.code)}" title="${esc(x.label)}" class="${x.code === c.type ? 'active' : ''}">${esc(x.code)}</button>`).join('')}</div>
         <div class="ld-grid">
           <label>Répétition</label><span class="spin"><button data-cnt="-1">−</button><input type="number" min="1" data-count value="${c.count}"><button data-cnt="1">＋</button><span class="muted">&nbsp;fois</span></span>
-          <label><span class="chip" style="background:${A.color};color:${textOn(A.color)}">${esc(A.name)}</span></label><div class="surface-choice"><select data-side="sa">${surfOptions(A, c.sa)}</select><label class="surface-repeat" title="Répétitions de la surface A">× <input aria-label="Répétitions surface A" type="number" min="1" step="1" data-scount="countA" value="${c.countA}"></label></div>
-          <label><span class="chip" style="background:${B.color};color:${textOn(B.color)}">${esc(B.name)}</span></label><div class="surface-choice"><select data-side="sb">${surfOptions(B, c.sb)}</select><label class="surface-repeat" title="Répétitions de la surface B">× <input aria-label="Répétitions surface B" type="number" min="1" step="1" data-scount="countB" value="${c.countB}"></label></div>
+          <label><span class="chip" style="background:${A.color};color:${textOn(A.color)}">${esc(A.name)}</span></label><div class="surface-choice"><select data-side="sa">${surfOptions(A, c.sa)}</select><label class="surface-repeat" title="Répétitions de la surface A">× <input aria-label="Répétitions surface A" type="number" min="1" step="1" data-scount="countA" value="${c.countA}"></label><input type="text" class="surface-name" data-sname="nameA" value="${esc(c.nameA || '')}" placeholder="Nom libre (facultatif)" title="Texte libre affiché sur la bulle à la place de la nomenclature automatique ; vide = nom automatique" aria-label="Nom libre de la surface A" ${c.sa.startsWith('new:') ? '' : 'hidden'}></div>
+          <label><span class="chip" style="background:${B.color};color:${textOn(B.color)}">${esc(B.name)}</span></label><div class="surface-choice"><select data-side="sb">${surfOptions(B, c.sb)}</select><label class="surface-repeat" title="Répétitions de la surface B">× <input aria-label="Répétitions surface B" type="number" min="1" step="1" data-scount="countB" value="${c.countB}"></label><input type="text" class="surface-name" data-sname="nameB" value="${esc(c.nameB || '')}" placeholder="Nom libre (facultatif)" title="Texte libre affiché sur la bulle à la place de la nomenclature automatique ; vide = nom automatique" aria-label="Nom libre de la surface B" ${c.sb.startsWith('new:') ? '' : 'hidden'}></div>
           <label>Détails</label><div class="dets">${det}</div>
         </div>
       </div>
@@ -145,11 +146,14 @@ function liaisonDialog(pidA, pidB, editId) {
     }
     if ('count' in t.dataset) c.count = Math.max(1, parseInt(t.value, 10) || 1);
     if (t.dataset.scount) c[t.dataset.scount] = Number(t.value);
+    if (t.dataset.sname) { c[t.dataset.sname] = t.value; refreshCard(i); return; }
     if (t.dataset.side) {
       c[t.dataset.side] = t.value; c[t.dataset.side === 'sa' ? 'touchedA' : 'touchedB'] = true;
       const key = t.dataset.side === 'sa' ? 'countA' : 'countB';
       c[key] = t.value.startsWith('ex:') ? SF(t.value.slice(3)).count || 1 : 1;
       $(`[data-scount="${key}"]`, node).value = c[key];
+      const nameInp = $(`[data-sname="${t.dataset.side === 'sa' ? 'nameA' : 'nameB'}"]`, node);
+      if (nameInp) nameInp.hidden = !t.value.startsWith('new:');
       cards.forEach((_, j) => refreshCard(j)); return;
     }
     refreshCard(i);
@@ -191,8 +195,14 @@ function liaisonDialog(pidA, pidB, editId) {
       const angAB = Math.atan2(B.y - A.y, B.x - A.x), angBA = angAB + Math.PI;
       let last = null;
       for (const c of cards) {
-        const resolve = (val, p, ang, sign) => val.startsWith('ex:') ? val.slice(3) : createSurface(p.id, val.slice(4), null, ang, sign).id;
-        const sa = resolve(c.sa, A, angAB, 1), sb = resolve(c.sb, B, angBA, -1);
+        const resolve = (val, p, ang, sign, custom) => {
+          if (val.startsWith('ex:')) return val.slice(3);
+          const id = createSurface(p.id, val.slice(4), null, ang, sign).id;
+          const nm = String(custom || '').trim();
+          if (nm) SF(id).name = nm;
+          return id;
+        };
+        const sa = resolve(c.sa, A, angAB, 1, c.nameA), sb = resolve(c.sb, B, angBA, -1, c.nameB);
         SF(sa).count = c.countA; SF(sb).count = c.countB;
         const details = {}; ltype(c.type).fields.forEach(f => details[f] = c.details[f] || '');
         if (c.editId && L(c.editId)) { const l = L(c.editId); Object.assign(l, { a: sa, b: sb, type: c.type, count: c.count, details }); last = l; }

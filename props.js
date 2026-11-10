@@ -90,14 +90,14 @@ function surfPanel(s) {
     ${fRow('Type', fSel('type', s.type, doc.settings.surfaceTypes.map(t => [t.code, t.code + ' — ' + t.label])))}
     ${fRow('N° surface', fNum('idx', s.idx, 1))}
     ${fRow('Répétitions', fNum('count', s.count || 1, 1))}
-    ${fRow('Nom affiché', fText('name', s.name, `${s.type}.${p.num}.${s.idx} (auto)`))}
+    ${fRow('Nom libre', fText('name', s.name, `${s.type}.${p.num}.${s.idx} (auto)`))}
     ${fRow('Couleur', fColor('color'))}
     ${fRow('Contour', fColor('stroke'))}
     ${fRow('Placement', fCheck('auto', !s.pinned, 'Automatique (suit les liaisons)'))}
     ${cf ? `<h4>Surface de ${esc(cfDisplayName(cf))}</h4><button data-goto="${cf.id}">Modifier ${esc(cfDisplayName(cf))}</button><p class="muted">Supprimer cette surface supprime ses liaisons et sa CF, ainsi que les cycles associés ; l’autre surface de la CF est supprimée seulement si elle devient inutile.</p>` : ''}
     <h4>Liaisons (${ls.length})</h4>
     <div>${ls.map(l => `<button data-goto="${l.id}" style="margin:2px">${esc(liaisonLabel(l))}</button>`).join('') || '<span class="muted">aucune</span>'}</div>
-    <div class="btns"><button data-pa="del" class="danger" title="Supprime aussi les liens et les cycles qui dépendent de cette surface">🗑 Supprimer ${cf ? '(avec sa CF)' : '(avec ses liaisons)'}</button></div>`;
+    <div class="btns">${s.name ? '<button data-pa="nameauto" title="Effacer le nom libre et revenir au nom automatique">↺ Nom automatique</button>' : ''}<button data-pa="del" class="danger" title="Supprime aussi les liens et les cycles qui dépendent de cette surface">🗑 Supprimer ${cf ? '(avec sa CF)' : '(avec ses liaisons)'}</button></div>`;
 }
 function linkPanel(l) {
   const sa = SF(l.a), sb = SF(l.b), pa = P(sa.pieceId), pb = P(sb.pieceId), t = ltype(l.type);
@@ -289,6 +289,7 @@ function propAction(a, t, btn) {
     case 'straight': checkpoint(); t.curved = false; t.bend = 0; changed(); break;
     case 'circle': checkpoint(); { const r = Math.round((t.rx + t.ry) / 2); t.rx = r; t.ry = r; } changed(); break;
     case 'torsorreset': checkpoint(); delete t.torsor; changed(); break;
+    case 'nameauto': checkpoint(); t.name = ''; changed(); break;
     case 'nominalauto': checkpoint(); delete t.nominal; changed(); break;
     case 'multicolor': {
       const c = $('#multiColor').value; checkpoint();

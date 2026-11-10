@@ -536,6 +536,7 @@ function onDouble(h, pt, e) {
   if (h.kind === 'liaison' || h.kind === 'llabel') { const l = L(h.id); return liaisonDialog(SF(l.a).pieceId, SF(l.b).pieceId, l.id); }
   if (h.kind === 'torseur') { const l = L(h.id); return l ? liaisonDialog(SF(l.a).pieceId, SF(l.b).pieceId, l.id) : null; }
   if (h.kind === 'cfg') { const c = C(h.id); return cfDialog(SF(c.a).pieceId, SF(c.b).pieceId, c.id); }
+  if (h.kind === 'surface') return surfaceNameDialog(h.id);
   if (h.kind === 'group' || h.kind === 'cfg' || h.kind === 'surface') { const i = $('#props [data-k=name]'); if (i) { i.focus(); i.select(); } }
 }
 

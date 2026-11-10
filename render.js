@@ -55,7 +55,7 @@ function surfSVG(s) {
   const cycleColor = cycleMarks.colors.surfaces.get(s.id);
   const stroke = cf?.inColor === false ? '#000000' : marked ? cycleColor : s.stroke;
   const tc = cf?.inColor === false ? '#000000' : marked ? cycleColor : lum(s.color) < 0.2 ? '#ffffff' : '#1f3b70';
-  return `<g data-id="${s.id}" data-kind="surface">${cf ? `<title>Surface de ${esc(cfDisplayName(cf))}</title>` : ''}<circle cx="${r1(c.x)}" cy="${r1(c.y)}" r="${s.r}" fill="${s.color}" stroke="${stroke}" stroke-width="${marked ? 2.2 : s.sw}"${marked ? ' stroke-dasharray="6 4"' : ''}/>` +
+  return `<g data-id="${s.id}" data-kind="surface">${cf ? `<title>Surface de ${esc(cfDisplayName(cf))}</title>` : '<title>Double-clic pour nommer la surface (vide = nom automatique)</title>'}<circle cx="${r1(c.x)}" cy="${r1(c.y)}" r="${s.r}" fill="${s.color}" stroke="${stroke}" stroke-width="${marked ? 2.2 : s.sw}"${marked ? ' stroke-dasharray="6 4"' : ''}/>` +
     `<text x="${r1(c.x)}" y="${r1(c.y + (s.count > 1 ? -3 : SURF_FONT * 0.35))}" text-anchor="middle" font-size="${SURF_FONT}" fill="${tc}">${s.count > 1 ? `<tspan x="${r1(c.x)}">${s.count}x</tspan><tspan x="${r1(c.x)}" dy="15">${esc(name)}</tspan>` : esc(name)}</text></g>`;
 }
 function linkGeom(l) {

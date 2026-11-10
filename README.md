@@ -137,6 +137,13 @@ Le numéro de pièce sert à nommer automatiquement les surfaces. Par exemple,
 `CY.1.1` désigne une surface cylindrique de la pièce 1. Il n’est pas affiché
 séparément sous le nom de la pièce.
 
+Chaque surface peut aussi porter un **nom libre** (facultatif) : à la création
+dans les fenêtres de liaison et de CF, par **double-clic sur la bulle**, ou avec
+le champ **Nom libre** du panneau de la surface. Le texte est libre, sans
+contrainte de format, et remplace la nomenclature automatique sur la bulle et
+dans tous les exports. Laisser vide conserve le nom automatique ; le bouton
+**↺ Nom automatique** du panneau efface le nom libre.
+
 Le **nom de la pièce** accepte les retours à la ligne (champ multi-lignes à la
 création et dans le panneau). Il est centré automatiquement dans la pièce ; le
 glisser le déplace librement, et un **double-clic** sur le nom (ou le bouton

@@ -120,7 +120,8 @@ function cfDialog(pidA, pidB, editId) {
   const normMode = ['x', 'y', 'z'].includes(det.normale) ? det.normale : det.normale ? 'custom' : 'none';
   const state = {
     sa: sa ? 'ex:' + sa.id : 'new:PL', sb: sb ? 'ex:' + sb.id : 'new:PL',
-    countA: sa ? sa.count || 1 : 1, countB: sb ? sb.count || 1 : 1
+    countA: sa ? sa.count || 1 : 1, countB: sb ? sb.count || 1 : 1,
+    nameA: '', nameB: ''
   };
   const surfOptions = (p, val) => {
     const news = doc.settings.surfaceTypes.map(t => `<option value="new:${esc(t.code)}" ${val === 'new:' + t.code ? 'selected' : ''}>${esc(t.code)} — ${esc(t.label)}</option>`).join('');
@@ -134,9 +135,9 @@ function cfDialog(pidA, pidB, editId) {
     <div class="row"><label>Nom de la CF</label><input id="cfName" type="text" value="${esc(c ? cfName(c) : nextCFName())}" autofocus placeholder="Texte, nombre ou vide"></div>
     <div class="ld-grid">
       <label><span class="chip" id="cfChipA"></span></label>
-      <div class="surface-choice"><select data-side="sa">${surfOptions(A, state.sa)}</select><label class="surface-repeat" title="Répétitions de la surface A">× <input aria-label="Répétitions surface A" type="number" min="1" step="1" data-scount="countA" value="${state.countA}"></label></div>
+      <div class="surface-choice"><select data-side="sa">${surfOptions(A, state.sa)}</select><label class="surface-repeat" title="Répétitions de la surface A">× <input aria-label="Répétitions surface A" type="number" min="1" step="1" data-scount="countA" value="${state.countA}"></label><input type="text" class="surface-name" data-sname="nameA" value="${esc(state.nameA)}" placeholder="Nom libre (facultatif)" title="Texte libre affiché sur la bulle à la place de la nomenclature automatique ; vide = nom automatique" aria-label="Nom libre de la surface A" ${state.sa.startsWith('new:') ? '' : 'hidden'}></div>
       <label><span class="chip" id="cfChipB"></span></label>
-      <div class="surface-choice"><select data-side="sb">${surfOptions(B, state.sb)}</select><label class="surface-repeat" title="Répétitions de la surface B">× <input aria-label="Répétitions surface B" type="number" min="1" step="1" data-scount="countB" value="${state.countB}"></label></div>
+      <div class="surface-choice"><select data-side="sb">${surfOptions(B, state.sb)}</select><label class="surface-repeat" title="Répétitions de la surface B">× <input aria-label="Répétitions surface B" type="number" min="1" step="1" data-scount="countB" value="${state.countB}"></label><input type="text" class="surface-name" data-sname="nameB" value="${esc(state.nameB)}" placeholder="Nom libre (facultatif)" title="Texte libre affiché sur la bulle à la place de la nomenclature automatique ; vide = nom automatique" aria-label="Nom libre de la surface B" ${state.sb.startsWith('new:') ? '' : 'hidden'}></div>
       <label>Détails <span class="muted">(facultatif)</span></label>
       <div class="dets">
         <label title="Point / centre">pt</label><input type="text" data-det="point" value="${esc(det.point)}" placeholder="—" title="Point / centre (facultatif), ex. A, O">
@@ -151,11 +152,14 @@ function cfDialog(pidA, pidB, editId) {
   $('#cfChipB', body).style.background = B.color; $('#cfChipB', body).style.color = textOn(B.color); $('#cfChipB', body).innerHTML = esc(B.name).replace(/\n/g, '<br>');
   body.addEventListener('input', e => {
     const t = e.target;
+    if (t.dataset.sname) { state[t.dataset.sname] = t.value; return; }
     if (t.dataset.side) {
       state[t.dataset.side] = t.value;
       const key = t.dataset.side === 'sa' ? 'countA' : 'countB';
       state[key] = t.value.startsWith('ex:') ? SF(t.value.slice(3)).count || 1 : 1;
       $(`[data-scount="${key}"]`, body).value = state[key];
+      const nameInp = $(`[data-sname="${t.dataset.side === 'sa' ? 'nameA' : 'nameB'}"]`, body);
+      if (nameInp) nameInp.hidden = !t.value.startsWith('new:');
     }
     if (t.dataset.scount) state[t.dataset.scount] = Number(t.value);
     if (t.id === 'cfNormMode') { const inp = $('#cfNormCustom', body); inp.hidden = t.value !== 'custom'; if (!inp.hidden) inp.focus(); }
@@ -185,8 +189,14 @@ function cfDialog(pidA, pidB, editId) {
       if (layoutError) { $('#cfErr', body).textContent = layoutError; return false; }
       checkpoint();
       const angAB = Math.atan2(B.y - A.y, B.x - A.x);
-      const resolve = (val, p, ang) => val.startsWith('ex:') ? val.slice(3) : createSurface(p.id, val.slice(4), null, ang).id;
-      const aId = resolve(state.sa, A, angAB), bId = resolve(state.sb, B, angAB + Math.PI);
+      const resolve = (val, p, ang, custom) => {
+        if (val.startsWith('ex:')) return val.slice(3);
+        const id = createSurface(p.id, val.slice(4), null, ang).id;
+        const nm = String(custom || '').trim();
+        if (nm) SF(id).name = nm;
+        return id;
+      };
+      const aId = resolve(state.sa, A, angAB, state.nameA), bId = resolve(state.sb, B, angAB + Math.PI, state.nameB);
       SF(aId).count = countA; SF(bId).count = countB;
       let cf = c;
       if (cf) Object.assign(cf, { a: aId, b: bId, name, details: { point, normale } });
