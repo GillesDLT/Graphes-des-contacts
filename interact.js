@@ -217,12 +217,12 @@ svg.addEventListener('pointerdown', e => {
     if (editSpecId) {
       const sp = (S().isoSpecs || []).find(x => x.id === editSpecId);
       if (!sp) { setTool('select'); return; }
-      if (owner !== sp.ownerPieceId) return toast('Une spécification ne peut viser que des composants de sa pièce.');
+      if (sp.targets.length && owner !== sp.ownerPieceId) return toast('Une spécification ne peut viser que des composants de sa pièce.');
       const index = (sp.targets || []).findIndex(t => t.targetKind === target.targetKind && t.targetId === target.targetId);
-      if (index >= 0 && sp.targets.length === 1) return toast('La spécification doit rester liée à au moins un composant.');
       checkpoint();
-      if (index >= 0) sp.targets.splice(index, 1);
+      if (index >= 0) { sp.targets.splice(index, 1); if (!sp.targets.length) sp.ownerPieceId = null; }
       else {
+        sp.ownerPieceId = owner;
         const linked = { ...target, tip: 'arrow' };
         const elbow = specDefaultElbow(sp, linked);
         linked.elbowX = elbow.x; linked.elbowY = elbow.y;
@@ -383,6 +383,7 @@ function startMove(pt) {
 }
 
 svg.addEventListener('pointermove', e => {
+  if (typeof Collab !== 'undefined') Collab.trackCursor(e);
   if (!drag) return;
   const pt = toWorld(e);
   if (drag.type === 'pan') {
@@ -620,10 +621,18 @@ $('#toolbar').addEventListener('click', e => {
 async function toolbarAction(a) {
   const r = stage.getBoundingClientRect();
   switch (a) {
-    case 'new': askConfirm('Nouveau document', 'Effacer le document courant ? (pensez à l\'enregistrer avant)', () => { checkpoint(); doc = newDoc(); storageBlocked = false; sel.clear(); setTool('select'); fitView(); changed(); }); break;
+    case 'new': {
+      const p = Projects.createAndOpen('Nouveau projet');
+      renderProjectBadge(); setTool('select'); fitView();
+      toast(`Projet « ${p.name} » créé`);
+      break;
+    }
+    case 'projects': projectsDialog(); break;
+    case 'share': Collab.shareDialog(Projects.current); break;
     case 'open': $('#fileInput').click(); break;
     case 'save': saveJSON(); break;
     case 'png': exportPNG(); break;
+    case 'pngall': exportAllPNG(); break;
     case 'svgx': exportSVG(); break;
     case 'pptx': exportPPTX(); break;
     case 'pdf': exportPDF(); break;
@@ -657,8 +666,18 @@ async function toolbarAction(a) {
 }
 $('#fileInput').addEventListener('change', async e => {
   const f = e.target.files[0]; if (!f) return;
-  try { const o = JSON.parse(await f.text()); checkpoint(); loadDoc(o); storageBlocked = false; sel.clear(); setTool('select'); changed(); fitView(); toast('Document ouvert'); }
-  catch (err) { toast('Erreur : ' + err.message); }
+  try {
+    const o = JSON.parse(await f.text());
+    if (e.target.dataset.intoNew || !Projects.currentProject()) {
+      delete e.target.dataset.intoNew;
+      Projects.importDoc(o, o.name || (o.sheets && o.sheets[0] && o.sheets[0].name));
+      renderProjectBadge();
+      toast('Graphe importé dans un nouveau projet');
+    } else {
+      checkpoint(); loadDoc(o); storageBlocked = false; sel.clear(); setTool('select'); changed(); fitView(); toast('Document ouvert');
+    }
+  }
+  catch (err) { delete e.target.dataset.intoNew; toast('Erreur : ' + err.message); }
   e.target.value = '';
 });
 
@@ -676,6 +695,48 @@ $('#tabs').addEventListener('dblclick', e => {
   const tab = e.target.closest('[data-sheet]'); if (!tab) return;
   const sh = doc.sheets.find(s => s.id === tab.dataset.sheet);
   askText('Renommer la feuille', sh.name, v => { if (v) { checkpoint(); sh.name = v; changed(); } });
+});
+
+/* Ordre des graphes choisi à la main : glisser un onglet sur un autre */
+let tabDragId = null;
+$('#tabs').addEventListener('dragstart', e => {
+  const tab = e.target.closest('[data-sheet]'); if (!tab) return;
+  tabDragId = tab.dataset.sheet;
+  tab.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+  try { e.dataTransfer.setData('text/plain', tabDragId); } catch {}
+});
+$('#tabs').addEventListener('dragend', () => {
+  tabDragId = null;
+  $$('.tab').forEach(t => t.classList.remove('dragging', 'over', 'over-after'));
+});
+$('#tabs').addEventListener('dragover', e => {
+  if (!tabDragId) return;
+  e.preventDefault();
+  const tab = e.target.closest('[data-sheet]');
+  $$('.tab').forEach(t => t.classList.remove('over', 'over-after'));
+  if (!tab || tab.dataset.sheet === tabDragId) return;
+  const r = tab.getBoundingClientRect();
+  tab.classList.add(e.clientX > r.left + r.width / 2 ? 'over-after' : 'over');
+});
+$('#tabs').addEventListener('drop', e => {
+  if (!tabDragId) return;
+  e.preventDefault();
+  const tab = e.target.closest('[data-sheet]');
+  const from = doc.sheets.findIndex(s => s.id === tabDragId);
+  let to = tab ? doc.sheets.findIndex(s => s.id === tab.dataset.sheet) : doc.sheets.length - 1;
+  if (from < 0 || to < 0) return;
+  if (tab) {
+    const r = tab.getBoundingClientRect();
+    if (e.clientX > r.left + r.width / 2) to = Math.min(doc.sheets.length - 1, to + (from < to ? 0 : 1));
+  }
+  if (to === from) return;
+  checkpoint();
+  const [sh] = doc.sheets.splice(from, 1);
+  doc.sheets.splice(Math.max(0, Math.min(doc.sheets.length, to)), 0, sh);
+  tabDragId = null;
+  changed();
+  toast('Ordre des graphes mis à jour');
 });
 
 /* ===== Export ===== */
@@ -700,8 +761,8 @@ function isoFontStyle() {
 function download(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); }
 const fileBase = () => S().name.replace(/[^\w\-À-ÿ ]+/g, '_').trim() || 'graphe';
 function saveJSON() { exportFileDialog({ title: 'Enregistrer le graphe JSON', extension: '.json', mime: 'application/json', makeBlob: () => new Blob([JSON.stringify(doc, null, 1)], { type: 'application/json' }) }); }
-function buildExportSVG({ transparentBackground = false } = {}) {
-  if (!S().pieces.length && !(S().notes || []).length && !(S().isoRefs || []).length && !(S().isoSpecs || []).length) { toast('Graphe vide'); return null; }
+function buildExportSVG({ transparentBackground = false, allowEmpty = false } = {}) {
+  if (!allowEmpty && !S().pieces.length && !(S().notes || []).length && !(S().isoRefs || []).length && !(S().isoSpecs || []).length) { toast('Graphe vide'); return null; }
   const box = $('#content').getBBox(), bb = { x0: box.x, y0: box.y, x1: box.x + box.width, y1: box.y + box.height };
   const m = 40, x = bb.x0 - m, y = bb.y0 - m, w = bb.x1 - bb.x0 + 2 * m, h = bb.y1 - bb.y0 + 2 * m;
   // Sérialiser le DOM SVG plutôt que de recopier innerHTML : les <text>/<tspan>
@@ -721,6 +782,9 @@ function buildExportSVG({ transparentBackground = false } = {}) {
 function exportSVG() { exportFileDialog({ title: 'Exporter en SVG vectoriel', extension: '.svg', mime: 'image/svg+xml', makeBlob: () => { const s = buildExportSVG(); return s ? new Blob([s.str], { type: 'image/svg+xml;charset=utf-8' }) : null; } }); }
 function renderPNG(scale = 3) {
   const s = buildExportSVG({ transparentBackground: true }); if (!s) return Promise.resolve(null);
+  return rasterizePNG(s, scale);
+}
+function rasterizePNG(s, scale = 3) {
   return new Promise(res => {
     const img = new Image();
     img.onload = () => {
@@ -732,6 +796,64 @@ function renderPNG(scale = 3) {
   });
 }
 function exportPNG() { exportFileDialog({ title: 'Exporter en PNG', extension: '.png', mime: 'image/png', makeBlob: renderPNG }); }
+function exportAllPNG() { exportFileDialog({ title: 'Exporter toutes les feuilles en PNG', extension: '.zip', mime: 'application/zip', makeBlob: makeAllPNGZip }); }
+
+// Archive ZIP sans compression : les PNG sont déjà compressés. Les noms sont UTF-8.
+function pngZipStore(files) {
+  const enc = new TextEncoder(), local = [], central = []; let offset = 0;
+  const u16 = n => [n & 255, (n >>> 8) & 255], u32 = n => [n & 255, (n >>> 8) & 255, (n >>> 16) & 255, (n >>> 24) & 255];
+  const table = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1); table[n] = c >>> 0; }
+  if (files.length > 65535) throw new Error('Trop de feuilles pour une archive ZIP.');
+  for (const { name: path, data } of files) {
+    const name = enc.encode(path); let crc = 0xffffffff;
+    for (const b of data) crc = table[(crc ^ b) & 255] ^ (crc >>> 8);
+    crc = (crc ^ 0xffffffff) >>> 0;
+    if (name.length > 65535 || data.length > 0xffffffff || offset + data.length + name.length + 30 > 0xffffffff) throw new Error('Archive ZIP trop volumineuse.');
+    const head = Uint8Array.from([...u32(0x04034b50), ...u16(20), ...u16(0x0800), ...u16(0), ...u16(0), ...u16(0), ...u32(crc), ...u32(data.length), ...u32(data.length), ...u16(name.length), ...u16(0)]);
+    const cent = Uint8Array.from([...u32(0x02014b50), ...u16(20), ...u16(20), ...u16(0x0800), ...u16(0), ...u16(0), ...u16(0), ...u32(crc), ...u32(data.length), ...u32(data.length), ...u16(name.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(offset)]);
+    local.push(head, name, data); central.push(cent, name); offset += head.length + name.length + data.length;
+  }
+  const centralSize = central.reduce((n, a) => n + a.length, 0);
+  if (offset + centralSize > 0xffffffff) throw new Error('Archive ZIP trop volumineuse.');
+  const end = Uint8Array.from([...u32(0x06054b50), ...u16(0), ...u16(0), ...u16(files.length), ...u16(files.length), ...u32(centralSize), ...u32(offset), ...u16(0)]);
+  return new Blob([...local, ...central, end], { type: 'application/zip' });
+}
+
+async function makeAllPNGZip() {
+  const originalDoc = doc, originalTool = tool, originalCycleDraft = cycleDraft;
+  const originalSelection = [...sel], originalPick = pick, originalPickCFs = pickCFs;
+  const originalPickRepLabels = pickRepLabels, originalMarquee = marquee;
+  const pages = [], used = new Set();
+  try {
+    doc = clone(originalDoc); tool = 'select'; cycleDraft = null;
+    pick = []; pickCFs = []; pickRepLabels = []; marquee = null; sel.clear();
+    for (const sheet of doc.sheets) {
+      doc.active = sheet.id; render();
+      const svg = buildExportSVG({ transparentBackground: true, allowEmpty: true });
+      let base = String(sheet.name || '').replace(/[\x00-\x1f\x7f<>:"/\\|?*]/g, '_').replace(/[. ]+$/g, '').trim() || 'graphe';
+      base = Array.from(base).slice(0, 120).join('');
+      if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\.|$)/i.test(base)) base = '_' + base;
+      let name = base + '.png', n = 2;
+      while (used.has(name.toLocaleLowerCase())) name = `${base} (${n++}).png`;
+      used.add(name.toLocaleLowerCase());
+      pages.push({ name, svg });
+    }
+  } finally {
+    // Refaire le rendu sur une copie pour ne pas laisser autoLayout modifier le document vivant.
+    doc = clone(originalDoc); tool = originalTool; cycleDraft = originalCycleDraft;
+    pick = originalPick; pickCFs = originalPickCFs; pickRepLabels = originalPickRepLabels;
+    marquee = originalMarquee; sel.clear(); originalSelection.forEach(id => sel.add(id));
+    try { render(); } finally { doc = originalDoc; }
+  }
+  const files = [];
+  for (const page of pages) {
+    const blob = await rasterizePNG(page.svg);
+    if (!blob) throw new Error(`Rendu PNG impossible pour « ${page.name} ».`);
+    files.push({ name: page.name, data: new Uint8Array(await blob.arrayBuffer()) });
+  }
+  return pngZipStore(files);
+}
 function exportPDF() {
   const printWindow = window.open('', '_blank');
   if (!printWindow) { toast('Autorisez les fenêtres surgissantes pour créer le PDF.'); return; }
@@ -793,13 +915,17 @@ async function copyImage() {
 $('#curColor').addEventListener('input', () => { if (tool !== 'paint') setTool('paint'); });
 window.addEventListener('resize', () => render());
 (function init() {
-  let loaded = false, loadError = null;
-  try { const s = localStorage.getItem(LS_KEY); if (s) { loadDoc(JSON.parse(s)); loaded = true; } }
-  catch (e) { doc = newDoc(); storageBlocked = true; loadError = e; }
-  if (!loaded) { const r = stage.getBoundingClientRect(); S().view = { x: r.width / 2, y: r.height / 2, k: 1 }; }
-  changed(); updateTip();
-  if (loadError) {
-    toast('Document non chargé : ' + loadError.message + ' Stockage conservé ; ouvrez un JSON ou créez un nouveau document.');
-    $('#props').prepend(el(`<p class="err">Document non chargé : ${esc(loadError.message)} Le stockage original est conservé. Ouvrez un fichier JSON ou créez un nouveau document pour reprendre l’enregistrement automatique.</p>`));
-  }
+  let loadError = null;
+  (async () => {
+    try { await Collab.bootSession(); }
+    catch (e) { loadError = e; window.__bootError = e; console.error('Démarrage :', e); doc = newDoc(); }
+    if (!S().view || !S().view.k) { const r = stage.getBoundingClientRect(); S().view = { x: r.width / 2, y: r.height / 2, k: 1 }; }
+    renderProjectBadge();
+    changed(); updateTip();
+    if (loadError) {
+      toast('Document non chargé : ' + loadError.message + ' — un nouveau projet a été ouvert.');
+      $('#props').prepend(el(`<p class="err">Document non chargé : ${esc(loadError.message)} Un nouveau projet a été ouvert ; la copie précédente reste dans le stockage du navigateur.</p>`));
+    }
+    projectsDialog();
+  })();
 })();

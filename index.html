@@ -11,10 +11,15 @@
     <span class="brand">⚙ Graphe des contacts</span>
   </div>
   <div class="tb-group">
-    <button data-act="new" title="Nouveau document">🗋</button>
+    <button data-act="projects" title="Projets : plusieurs graphes, ordre choisi à la main, partage">🗂 <span id="projName">Projet</span><span id="projDot" hidden title="Ce projet est partagé en direct">●</span></button>
+    <span id="collabState" hidden></span>
+    <div id="presence"></div>
+  </div>
+  <div class="tb-group">
     <button data-act="open" title="Ouvrir (.json)">📂</button>
     <button data-act="save" title="Enregistrer (.json) — Ctrl+S">💾</button>
     <button data-act="png" title="Exporter en PNG — Ctrl+E">PNG</button>
+    <button data-act="pngall" title="Exporter toutes les feuilles du projet en PNG (ZIP)">PNG · toutes les feuilles</button>
     <button data-act="svgx" title="Exporter en SVG vectoriel">SVG</button>
     <button data-act="pptx" title="Exporter vers PowerPoint avec des bulles modifiables">PPTX</button>
     <button data-act="pdf" title="Imprimer / enregistrer en PDF : vue d’ensemble puis cycles isolés">PDF</button>
@@ -42,26 +47,15 @@
   <div class="tb-group iso-tools" aria-label="ISO GPS">
     <button data-act="isogps" title="ISO GPS : références ISO et cadres de tolérance (spécifications), affichage des symboles">ISO GPS</button>
   </div>
-  <div class="tb-group">
-    <button data-tool="pipette" title="Pipette : prendre la couleur d'un élément — I">💧</button>
-    <button data-tool="paint" title="Pot de peinture : appliquer la couleur courante — B">🪣</button>
-    <input type="color" id="curColor" value="#fdb975" title="Couleur courante">
-    <button data-act="eyedrop" title="Pipette écran (n'importe quel pixel)">🎯</button>
-  </div>
+  <input type="color" id="curColor" value="#fdb975" hidden aria-hidden="true" tabindex="-1">
   <div class="tb-group">
     <button data-act="zoomout" title="Zoom arrière">−</button>
     <span id="zoomLbl">100%</span>
     <button data-act="zoomin" title="Zoom avant">+</button>
     <button data-act="fit" title="Ajuster à l'écran — 0">⤢</button>
-    <button data-act="grid" title="Afficher / masquer la grille">#</button>
-    <button data-act="surfaces" title="Afficher / masquer les symboles et noms des surfaces (les liaisons restent visibles)" aria-pressed="true">Surfaces</button>
     <button data-act="details" title="Afficher le détail des liaisons (axe, normale…) sur le graphe">n(<span class="vec">z</span>)</button>
-    <button data-act="torseurs" title="Afficher / masquer les torseurs des actions transmissibles sous les liaisons">Torseurs</button>
-    <button data-act="nominal0" title="Afficher / cacher les nominaux n° de pièce . 0 reliés à toutes les surfaces">Nominal 0</button>
     <button data-act="referenceimage" title="Choisir une image locale temporaire">Image de référence</button>
     <button data-act="settings" title="Paramètres (types de surfaces / liaisons)">Paramètres</button>
-    <button data-act="help" title="Aide">? Help</button>
-    <button data-act="github" title="Voir le projet sur GitHub" aria-label="GitHub"><svg class="tool-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8a8 8 0 0 0 5.47 7.59c.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8 8 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg></button>
   </div>
 </header>
 <main>
@@ -87,6 +81,7 @@
           <g id="l-nominal-labels"></g>
         </g>
         <g id="l-overlay"></g>
+        <g id="l-peers" pointer-events="none"></g>
       </g>
     </svg>
     <div id="tip"></div>
@@ -106,6 +101,10 @@
 <input type="file" id="fileInput" accept=".json,application/json" hidden>
 <input type="file" id="referenceImageInput" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp,image/avif" hidden>
 <script src="core.js"></script>
+<script src="sync-core.js"></script>
+<script src="collab.config.js"></script>
+<script src="projects.js"></script>
+<script src="collab.js"></script>
 <script src="reference-layout.js"></script>
 <script src="metaball.js"></script>
 <script src="symbols.js"></script>

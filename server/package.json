@@ -1,0 +1,10 @@
+{
+  "name": "graphe-des-contacts-serveur",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "description": "Serveur de partage en direct du Graphe des contacts",
+  "main": "graph-server.js",
+  "scripts": { "start": "node graph-server.js" },
+  "dependencies": { "ws": "^8.18.0" }
+}

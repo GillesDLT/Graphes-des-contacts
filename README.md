@@ -54,6 +54,11 @@ projets ou comptes rendus.
 - Ajouter des notes textuelles déplaçables et choisir un nom/emplacement au moment de l’export.
 - Afficher une image de référence flottante pendant le travail.
 - Enregistrer et rouvrir les graphes au format **JSON**.
+- Gérer **plusieurs projets** dans le navigateur, avec leurs graphes, rangés
+  dans l’ordre choisi ; glisser les onglets pour réordonner les graphes.
+- **Partager un graphe par un simple lien** et le modifier à plusieurs en même
+  temps, avec les curseurs et la sélection de chacun (voir
+  « Partager un graphe en direct »).
 
 ## Installer et ouvrir l’outil
 
@@ -155,7 +160,7 @@ Le bouton **?** ouvre une aide plus détaillée dans l’application. Les spéci
 
 ### Surfaces et liaisons
 
-Le bouton **Surfaces** de la barre d’outils masque ou réaffiche les symboles et noms des surfaces. Les liaisons restent visibles et les surfaces sont dessinées derrière elles lorsqu’elles sont affichées. Le masquage est visuel : les surfaces restent sélectionnables.
+L’option **Afficher les surfaces** dans Paramètres masque ou réaffiche les symboles et noms des surfaces. Les liaisons restent visibles et les surfaces sont dessinées derrière elles lorsqu’elles sont affichées. Le masquage est visuel : les surfaces restent sélectionnables.
 
 ### Organiser les pièces
 
@@ -193,7 +198,7 @@ toutes ensemble, sans effacer leur couleur enregistrée.
 
 ### Torseurs
 
-Le bouton **Torseurs** de la barre affiche ou masque, sous chaque liaison, son
+L’option **Afficher les torseurs** dans Paramètres affiche ou masque, sous chaque liaison, son
 torseur des actions transmissibles. Les lignes sont les axes x, y, z ; la
 première colonne donne les efforts / translations et la seconde les moments /
 rotations. Les valeurs par défaut suivent le type de liaison et son axe ou sa
@@ -232,7 +237,14 @@ dans le panneau.
 
 ## ISO GPS : références et spécifications
 
-Le bouton **ISO GPS** ouvre une boîte flottante avec deux outils et les bascules
+Dans **ISO GPS**, créez une **spécification liée** à une ou plusieurs surfaces. Une copie peut être déplacée et enregistrée sans surface ; le bouton « Ajouter / retirer des composants » permet de la relier ensuite. Pour détacher un cadre, retirez son dernier composant.
+
+Sélectionnez un cadre puis utilisez **Ctrl+C / Ctrl+V** (ou Dupliquer) pour copier ses sections et indications **sans copier de pièce, surface ou lien**. Vous pouvez ensuite relier la copie à une autre pièce. Les boutons d'indicateurs encerclés comprennent M, L, E, T, F, C, G, N, X, A et P ; il revient à l'utilisateur de choisir ceux adaptés à sa spécification.
+
+Les exports SVG, PNG et PDF conservent les cadres. L'export PowerPoint n'inclut pas encore les cadres ISO GPS.
+
+
+Le bouton **ISO GPS** ouvre une boîte flottante avec les outils et les bascules
 pour masquer / afficher leurs symboles (utile avant export).
 
 - **Réf. ISO** : cliquer sur une surface ou un groupe de surfaces pour y poser
@@ -243,12 +255,13 @@ pour masquer / afficher leurs symboles (utile avant export).
   surfaces appartenant à la même pièce, puis **Entrée** crée le **cadre de
   tolérance**. Les composants d’une autre pièce sont refusés et la spécification
   se déplace avec sa pièce. Chaque section reçoit un symbole de caractéristique,
-  une indication libre et des modificateurs encerclés (**Ⓜ**, **Ⓔ**, **Ⓛ**, **Ⓣ**,
-  **Ⓕ**).
+  une indication libre et des modificateurs encerclés (M, E, L, T, F, C, G, N,
+  X, A et P).
 
 Les indications adjacentes non encadrées se placent en haut à gauche du cadre :
-répétition (sans « 1x » si elle vaut 1), symbole de diamètre, valeur, indicateur
-encerclé et symbole supplémentaire. Après les sections, la partie « Indication
+répétition (sans « 1x » si elle vaut 1), symbole de diamètre, valeur et tolérance.
+Le sélecteur **Modificateur de taille** ajoute LP, GG, GC, GN ou GX à la cote
+adjacente, dans un cartouche arrondi (et non dans le cadre de tolérance). Après les sections, la partie « Indication
 complémentaire » propose les quatre types d’indicateurs ; leurs symboles graphiques
 seront ajustés à partir de la référence fournie. Les liens vers les composants se
 règlent en flèche, triangle plein ou trait simple. Les quatre types d’indication
@@ -279,6 +292,56 @@ Pendant la création d’un cycle, **Ctrl+clic sur la dernière étape** ou
 
 ## Sauvegarder son travail et le partager
 
+### Plusieurs projets, plusieurs graphes
+
+Chaque **projet** est un document complet (avec ses feuilles), enregistré
+automatiquement dans le navigateur. La liste des projets s'ouvre au démarrage
+et au rechargement ; le bouton **🗂 nom du projet** permet d'y revenir :
+
+- **Ouvrir** bascule d'un projet à l'autre sans rien perdre ;
+- **＋ Nouveau projet** crée un document vide ;
+- **✎** renomme, **⧉** duplique, **⤓** enregistre en `.json`, **🗑** supprime ;
+- la poignée **⠿** permet de **ranger la liste dans l'ordre choisi**, par
+  glisser-déposer.
+
+En bas de la fenêtre, les onglets sont les **graphes du projet courant**. On peut
+aussi les **glisser pour choisir leur ordre** (double-clic pour renommer,
+**＋** pour ajouter une feuille, **⧉** pour dupliquer). L'ordre est conservé,
+y compris pour les projets partagés.
+
+Un ancien document unique (`grapheLiaisons.v1`) est repris automatiquement au
+premier lancement sous forme de projet : rien n'est perdu.
+
+### Partager un graphe en direct (édition à plusieurs)
+
+Dans **Projets**, le bouton **Partager** permet de créer un **lien permanent** :
+
+```
+https://…/index.html#/b/hXUfSNym
+```
+
+Toute personne qui ouvre ce lien voit le même graphe et peut le modifier en
+même temps que vous, comme un tableau blanc partagé :
+
+- les pièces, surfaces, liaisons, groupes, CF, cycles, notes, références et
+  spécifications sont synchronisés à chaque modification ;
+- les avatars en haut à droite indiquent qui est connecté ; le nom et le
+  curseur de chacun apparaissent sur le graphe, et les objets qu'il sélectionne
+  sont entourés de sa couleur ;
+- le nom affiché se règle dans la fenêtre **Partager** ;
+- **Repasser en local** détache votre copie (les autres continuent avec la leur) ;
+- les réglages d'affichage (grille, surfaces, torseurs, zoom, feuille active)
+  restent propres à chaque poste : cacher les surfaces chez soi ne les cache
+  pas chez les autres.
+
+Le partage nécessite le petit serveur fourni dans le dossier `server/`
+(voir `server/README.md`) et l'adresse de ce serveur renseignée dans
+`collab.config.js` — ou saisie une fois dans la fenêtre **Partager**. Sans
+serveur, tout le reste fonctionne normalement, en local.
+
+> **Toute personne qui possède le lien peut modifier le graphe.** Le lien n'est
+> pas protégé par un mot de passe : ne le diffusez qu'aux personnes concernées.
+
 ### JSON : pour continuer à modifier le graphe
 
 Le bouton **Enregistrer** propose un nom de fichier et, si le navigateur le permet, un emplacement avant de sauvegarder le `.json` contenant le document et ses feuilles. Sinon, le fichier est téléchargé dans le dossier défini par le navigateur.
@@ -287,7 +350,9 @@ Pour reprendre le travail, ouvrir l’application, cliquer sur **Ouvrir**, puis
 choisir ce fichier JSON.
 
 **Pour envoyer un graphe modifiable à un enseignant ou à un autre étudiant,
-envoyer le fichier JSON.**
+envoyer le fichier JSON** — ou, pour travailler ensemble sur le même graphe,
+utiliser le **lien de partage** (voir ci-dessus) et réserver le JSON aux copies
+d'archive.
 
 > L’enregistrement automatique reste dans le navigateur. Il ne remplace pas
 > une copie JSON : changer de navigateur, déplacer le dossier, effacer les données
@@ -300,7 +365,7 @@ Le bouton **PDF** ouvre l’aperçu d’impression du navigateur. Choisir **Enre
 
 ### PNG / SVG : pour un compte rendu
 
-- **PNG** : une image à fond blanc à insérer dans un rapport ou une présentation.
+- **PNG** : une image à insérer dans un rapport ou une présentation. **PNG · toutes les feuilles** télécharge un ZIP avec un PNG nommé pour chaque feuille du projet.
 - **SVG** : une image vectorielle, qui reste nette lorsqu’elle est agrandie.
 - **PowerPoint (PPTX)** : exporte les pièces, surfaces, liaisons, libellés, groupes et notes en formes/textes PowerPoint modifiables. Chaque pièce est un sous-groupe PowerPoint contenant son ellipse, son nom et ses surfaces, que l’on peut sélectionner ou déplacer ensemble. Les traits de liaison entre surfaces et leurs libellés restent des objets PowerPoint séparés et éditables. Les courbes sont converties en une suite de petits traits éditables et les contours de groupes deviennent des ellipses d’enveloppe.
 - **Image** : copier le rendu dans le presse-papier, si le navigateur l’autorise.

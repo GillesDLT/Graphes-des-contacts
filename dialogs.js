@@ -264,11 +264,11 @@ function openIsoPopup() {
   const b = el(`<div class="popup iso-popup">
     <div class="ttl"><b>ISO GPS</b><button class="xbtn" title="Fermer (Échap)">✕</button></div>
     <button data-iso="ref">${ISO_REF_ICON} Réf. ISO</button>
-    <button data-iso="spec">${ISO_SPEC_ICON} Spécification</button>
+    <button data-iso="spec">${ISO_SPEC_ICON} Spécification liée</button>
     <div class="muted">Affichage</div>
     <button data-iso="isorefs"></button>
     <button data-iso="isospecs"></button>
-    <div class="muted">Réf. ISO : cliquer sur une surface ou un groupe de surfaces d’une seule pièce.<br>Spécification : cliquer sur une ou plusieurs surfaces / groupes de la même pièce, puis Entrée. La spécification suit sa pièce. Indications adjacentes, sections et indications complémentaires dans le panneau de droite.</div>
+    <div class="muted">Réf. ISO : cliquer sur une surface ou un groupe de surfaces d’une seule pièce.<br>Spécification : sélectionner des surfaces / groupes de la même pièce, puis Entrée. Copier-coller un cadre crée une copie sans lien, à rattacher ensuite si besoin. Indications dans le panneau de droite.</div>
   </div>`);
   const sync = () => {
     for (const [key, label, setting] of [['isorefs', 'Références', 'showIsoRefs'], ['isospecs', 'Spécifications', 'showSpecs']]) {
@@ -296,11 +296,22 @@ function openIsoPopup() {
 /* ===== Paramètres ===== */
 function settingsDialog() {
   const st = clone(doc.settings);
+  const initialNominal = !!(S().showNominalZero ?? st.showNominalZero);
+  st.showNominalZero = initialNominal;
   st.torseurLetters = Object.assign({}, DEFAULT_SETTINGS.torseurLetters, st.torseurLetters || {});
   const b = el(`<div style="width:760px"></div>`);
   const draw = () => {
     const sOpts = sel => st.surfaceTypes.map(t => `<option ${t.code === sel ? 'selected' : ''}>${esc(t.code)}</option>`).join('');
-    b.innerHTML = `<h4>Types de surfaces</h4>
+    b.innerHTML = `<h4>Affichage</h4>
+      <div class="settings-display">
+        <label><input type="checkbox" data-display="grid" ${st.grid ? 'checked' : ''}> Afficher la grille</label>
+        <label><input type="checkbox" data-display="showNominalZero" ${st.showNominalZero ? 'checked' : ''}> Afficher Nominal 0</label>
+        <label><input type="checkbox" data-display="showSurfaces" ${st.showSurfaces !== false ? 'checked' : ''}> Afficher les surfaces</label>
+        <label><input type="checkbox" data-display="showTorseurs" ${st.showTorseurs ? 'checked' : ''}> Afficher les torseurs</label>
+      </div>
+      <div class="btns"><button type="button" data-settings-help>? Aide</button><button type="button" data-settings-github>GitHub ↗</button></div>
+      <p class="muted">Les modifications sont appliquées avec « Valider ».</p>
+      <h4>Types de surfaces</h4>
       <table class="set"><tr><th>Code</th><th>Libellé</th><th></th></tr>
       ${st.surfaceTypes.map((t, i) => `<tr><td><input type="text" data-s="${i}" data-f="code" value="${esc(t.code)}" style="width:70px"></td><td><input type="text" data-s="${i}" data-f="label" value="${esc(t.label)}"></td><td><button data-dels="${i}" class="danger">✕</button></td></tr>`).join('')}
       </table><button data-adds>＋ Type de surface</button>
@@ -331,9 +342,12 @@ function settingsDialog() {
     if (d.l != null && d.fld) { const f = st.liaisonTypes[d.l].fields; const i = f.indexOf(d.fld); if (t.checked && i < 0) f.push(d.fld); if (!t.checked && i >= 0) f.splice(i, 1); }
     if (d.t) st.torseurLetters[d.t] = t.value;
     if (d.gc) st.groupColors[d.gc] = t.value;
+    if (d.display) st[d.display] = t.checked;
   });
   b.addEventListener('click', e => {
     const d = e.target.dataset;
+    if ('settingsHelp' in d) { helpDialog(); return; }
+    if ('settingsGithub' in d) { window.open('https://github.com/GillesDLT/Graphes-des-contacts', '_blank', 'noopener'); return; }
     if (d.dels != null) { st.surfaceTypes.splice(+d.dels, 1); draw(); }
     if (d.dell != null) { st.liaisonTypes.splice(+d.dell, 1); draw(); }
     if ('adds' in d) { st.surfaceTypes.push({ code: 'XX', label: 'Nouveau' }); draw(); }
@@ -344,7 +358,13 @@ function settingsDialog() {
   reset.onclick = () => { Object.assign(st, clone(DEFAULT_SETTINGS), { showDetails: st.showDetails, showSurfaces: st.showSurfaces, showIsoRefs: st.showIsoRefs, showSpecs: st.showSpecs, grid: st.grid }); draw(); };
   openModal({
     title: '⚙ Paramètres', body: b, extraLeft: reset, wide: 820,
-    onOk: () => { st.surfaceTypes = st.surfaceTypes.filter(t => t.code); st.liaisonTypes = st.liaisonTypes.filter(t => t.code); checkpoint(); doc.settings = st; changed(); }
+    onOk: () => {
+      st.surfaceTypes = st.surfaceTypes.filter(t => t.code); st.liaisonTypes = st.liaisonTypes.filter(t => t.code);
+      checkpoint();
+      if (!!st.showNominalZero !== initialNominal) doc.sheets.forEach(s => delete s.showNominalZero);
+      else st.showNominalZero = doc.settings.showNominalZero;
+      doc.settings = st; changed();
+    }
   });
 }
 
@@ -356,7 +376,7 @@ function helpDialog() {
     <h4>Modélisation</h4><ul class="help-list">
       <li>${k('P')} <b>Nouvelle pièce</b> : nom unique, numéro (pour la nomenclature des surfaces), couleur. Avec Déplacer, double-clic sur le fond = pièce à cet endroit. Poignées bleues = étirer horizontalement / verticalement (Maj = proportionnel). Le bouton <b>◯ Cercle parfait</b> du panneau de la pièce la rend circulaire en un clic. Le <b>nom accepte les retours à la ligne</b> (champ multi-lignes à la création et dans le panneau) ; il se déplace librement en le <b>glissant</b>, et un <b>double-clic sur le nom</b> ou le bouton <b>Recentre le nom</b> le remet au centre de la pièce.</li>
       <li>Les surfaces se placent <b>automatiquement</b> le long du bord, orientées vers la pièce liée, pour limiter les croisements de liaisons. Avec Déplacer, glisser une surface la fait coulisser le long du bord et la fige ; décocher/cocher « Placement automatique » dans le panneau pour la libérer. Le type <b>SC — Surface complexe</b> remplace Came (les anciens types CA sont convertis à l'ouverture).</li>
-      <li><b>Surfaces</b> : créées avec une liaison de contact ou une CF. Nomenclature automatique <i>TYPE.n°pièce.n°surface</i> (ex. PL.1.1). <b>Nom libre</b> : chaque surface peut afficher le texte de votre choix à la place — champ à la création dans les fenêtres de liaison / CF, <b>double-clic sur la bulle</b>, ou champ <b>Nom libre</b> du panneau. Laisser vide conserve la nomenclature automatique ; le bouton <b>↺ Nom automatique</b> du panneau efface le nom libre. Le bouton <b>Surfaces</b> de la barre masque ou réaffiche leurs symboles et noms sans masquer les liaisons ; les marqueurs sont dessinés derrière les liaisons. Supprimer une surface ou son lien supprime le lien <b>et</b> ses deux surfaces (une surface de contact encore utilisée par une autre liaison est conservée).</li>
+      <li><b>Surfaces</b> : créées avec une liaison de contact ou une CF. Nomenclature automatique <i>TYPE.n°pièce.n°surface</i> (ex. PL.1.1). <b>Nom libre</b> : chaque surface peut afficher le texte de votre choix à la place — champ à la création dans les fenêtres de liaison / CF, <b>double-clic sur la bulle</b>, ou champ <b>Nom libre</b> du panneau. Laisser vide conserve la nomenclature automatique ; le bouton <b>↺ Nom automatique</b> du panneau efface le nom libre. L’option <b>Surfaces</b> dans Paramètres masque ou réaffiche leurs symboles et noms sans masquer les liaisons ; les marqueurs sont dessinés derrière les liaisons. Supprimer une surface ou son lien supprime le lien <b>et</b> ses deux surfaces (une surface de contact encore utilisée par une autre liaison est conservée).</li>
       <li>${k('L')} <b>Nouvelle liaison</b> : ${k('Ctrl')}+clic sur 2 pièces → fenêtre de création (type, répétition, surfaces, noms libres facultatifs, détails, schéma). Si 2 pièces sont déjà sélectionnées, ${k('L')} ouvre directement la fenêtre. Double-clic sur une pièce = démarrer une liaison depuis elle ; double-clic sur une liaison = modifier. Après validation, l'outil revient sur Déplacer.</li>
       <li>${k('R')} <b>Répétition</b> : ${k('Ctrl')}+clic sur les pièces répétées, puis ${k('Entrée')}. La zone est plus proche des pièces qu'un groupe fonctionnel et inclut les contacts extérieurs. Cliquer sur une surface de CF pour inclure / retirer la <b>CF entière et ses deux surfaces</b> ; les CF sont exclues par défaut. « Modifier les membres » permet de changer ce choix. « ×2 » par défaut ; glisser le nom pour le déplacer, double-clic pour revenir au placement automatique.</li>
       <li>Quand un groupe fonctionnel est réduit, les répétitions purement internes sont masquées. Si une répétition a un contact extérieur (ou une CF extérieure incluse), son contour suit seulement les <b>surfaces et les liaisons concernées</b>, y compris leurs arcs : il n'englobe pas la bulle fonctionnelle entière. Développer le groupe restitue la répétition complète.</li>
@@ -371,7 +391,7 @@ function helpDialog() {
       <li><b>Spécification</b> (${k('S')}) : cadre de tolérance ISO 1101. Cliquer sur une ou plusieurs surfaces ou groupes de surfaces appartenant à la même pièce, puis ${k('Entrée')} crée un cadre lié à ces composants. Il suit leur pièce, et les clics sur une autre pièce sont refusés. Chaque <b>section</b> reçoit un symbole de caractéristique choisi dans une liste (droiture, planéité, position…), une indication adjacente (symbole Ø facultatif, texte, tolérance ± ou +/− en exposant/indice, ou classe comme E6). Les sections se déplacent, se suppriment et s’ajoutent ; les indications adjacentes non encadrées se placent au-dessus à gauche du cadre (une répétition de 1 n’affiche pas « 1x »). Les quatre indications complémentaires ajoutent une cellule avec symbole (symétrie, parallélisme, perpendicularité ou angle), texte, et leur marqueur distinctif (triangle, flèche ou cercle). Chaque coude peut recevoir un cercle ou deux cercles concentriques ; double-clic sur le cadre pour l’éditer.</li>
       <li><b>Nominal 0</b> : affiche / cache les bulles <i>n°pièce.0</i> reliées aux surfaces (contacts et CF). Glisser une bulle pour la déplacer à l'intérieur de sa pièce ; elle suit ensuite la pièce. Double-clic sur la bulle, ou bouton de réinitialisation dans le panneau de la pièce, pour revenir à la position initiale. La position reste conservée après enregistrement et copie. Les pièces masquées n'affichent pas de nominal.</li>
       <li>${k('C')} <b>CF</b> : clic sur deux pièces différentes → fenêtre de création comme pour les liaisons : les <b>couleurs des deux pièces</b> sont affichées, un nom libre (texte, nombre ou vide), et pour chaque extrémité une <b>surface existante</b> de la pièce ou une nouvelle surface (type + répétitions + nom libre facultatif). Un <b>point</b> et une <b>normale</b> facultatifs (x, y, z ou direction personnalisée du type u_123) peuvent être ajoutés ; ils s'affichent avec le détail des liaisons. Le nom doit être unique dans la feuille, sans distinction de casse ou d'espaces extérieurs ; une seule CF sans nom est autorisée. Les anciens noms CF1, CF2… sont conservés à l'ouverture. Une surface existante peut être partagée avec une liaison, mais jamais entre deux CF ; supprimer la CF ou une de ses surfaces supprime aussi ce qui devient inutile. L'option <b>Encadrer le libellé sur le trait</b> est disponible à la création et dans le panneau de la CF ; un nom vide n'affiche aucun texte ni cadre.</li>
-      <li><b>Torseurs</b> : le bouton <b>Torseurs</b> de la barre affiche / masque, sous chaque liaison, son torseur des actions transmissibles {T<sub>n1/n2</sub>}<sub>A</sub> = {u α ; v β ; w γ}<sub>A</sub>. Les lignes sont les axes x, y, z ; la colonne 1 donne les efforts / translations et la colonne 2 les moments / rotations. La <b>notation est configurable dans Paramètres</b> (par défaut u v w et α β γ ; saisir X Y Z et L M N pour la notation classique). Les valeurs par défaut suivent le type de liaison et son axe / normale choisis (avec la notation par défaut : Pivot sur x → α = 0, Glissière sur x → u = 0, Appui plan de normale z → w = γ = 0, Rotule → α = β = γ = 0, Ponctuelle → seul l’effort normal subsiste). Chaque valeur se modifie dans le panneau de la liaison ; <b>Valeurs par défaut</b> revient aux valeurs automatiques. Les indices reprennent les numéros des deux pièces et le <b>point d’application</b>, modifiable à côté des valeurs dans le panneau (A par défaut).</li>
+      <li><b>Torseurs</b> : l’option <b>Torseurs</b> dans Paramètres affiche / masque, sous chaque liaison, son torseur des actions transmissibles {T<sub>n1/n2</sub>}<sub>A</sub> = {u α ; v β ; w γ}<sub>A</sub>. Les lignes sont les axes x, y, z ; la colonne 1 donne les efforts / translations et la colonne 2 les moments / rotations. La <b>notation est configurable dans Paramètres</b> (par défaut u v w et α β γ ; saisir X Y Z et L M N pour la notation classique). Les valeurs par défaut suivent le type de liaison et son axe / normale choisis (avec la notation par défaut : Pivot sur x → α = 0, Glissière sur x → u = 0, Appui plan de normale z → w = γ = 0, Rotule → α = β = γ = 0, Ponctuelle → seul l’effort normal subsiste). Chaque valeur se modifie dans le panneau de la liaison ; <b>Valeurs par défaut</b> revient aux valeurs automatiques. Les indices reprennent les numéros des deux pièces et le <b>point d’application</b>, modifiable à côté des valeurs dans le panneau (A par défaut).</li>
       <li>Le panneau <b>CF</b> liste toutes les CF de la feuille : leur couleur est réglable et l'affichage peut être basculé individuellement ou toutes ensemble en <b>noir</b> ou dans leur <b>couleur enregistrée</b>. Le mode noir colore le lien, son libellé / cadre et ses surfaces propres, sans effacer les couleurs mémorisées. « Propriétés » ouvre les réglages détaillés.</li>
       <li><b>Cycles</b> : affiche, sans détailler les parcours, le nombre de cycles non indépendants passant par chaque CF et le nombre de cycles indépendants calculé par le nombre cyclomatique.</li>
       <li>${k('Y')} <b>Cycle</b> : partir d'une surface de CF, puis <b>clic ou Ctrl+clic</b> sur les surfaces ou références et terminer sur l'autre surface de <b>la même CF</b>. Une autre CF est refusée. <b>Ctrl+clic sur la dernière étape</b> ou ${k('Retour arrière')} la retire ; ${k('Échap')} annule. Surfaces, contacts, contours de références et courbes internes utilisent la <b>couleur du cycle</b> (orange par défaut), avec des pointillés passant près du centre des pièces. La CF garde son trait continu dans son propre mode noir / couleur, indépendamment du cycle. Aucun libellé « cycle N » n'est ajouté au graphe.</li>
@@ -387,7 +407,7 @@ function helpDialog() {
       <li>Cliquer pour sélectionner ; ${k('Ctrl')}+clic pour ajouter/retirer ; ${k('Maj')}+glisser sur le fond pour ajouter une sélection rectangle. Glisser une pièce déplace ses surfaces et ses liaisons. Glisser un groupe déplace toutes ses pièces. Les raccourcis clavier et le panneau de propriétés restent disponibles dans tous les modes.</li>
       <li>${k('Ctrl+C')} ${k('Ctrl+V')} ${k('Ctrl+D')} copier / coller / dupliquer · ${k('Suppr')} supprimer · ${k('Ctrl+A')} tout · ${k('Ctrl+I')} inverser la sélection (pratique pour trier ce qu'on supprime).</li>
       <li>${k('Ctrl+Z')} / ${k('Ctrl+Y')} annuler / rétablir · flèches = déplacement fin.</li>
-      <li>${k('I')} pipette et ${k('B')} pot de peinture · 🎯 pipette écran.</li>
+      <li>${k('I')} pipette et ${k('B')} pot de peinture ; les couleurs sont aussi modifiables dans le panneau de propriétés.</li>
       <li>Molette = zoom · clic droit / clic molette / ${k('Espace')}+glisser = se déplacer · ${k('0')} ajuster.</li>
       <li><b>Image de référence</b> : choisir une image locale (PNG, JPEG, WebP, GIF, BMP ou AVIF). La fenêtre apparaît en haut à droite du tableau : glisser son titre pour la déplacer et son coin inférieur droit pour la redimensionner. Molette ou + / − pour zoomer dans l'image ; glisser l'image pour la parcourir ; « Ajuster » pour la voir entière. Le bouton − du titre la cache, « Image de référence » la réaffiche, ✕ la supprime et « Remplacer » change l'image. Elle est <b>temporaire</b>, commune aux feuilles, non enregistrée dans le JSON et absente des exports PNG / SVG ; recharger la page la supprime.</li>
       <li>Feuilles en bas : ⧉ <b>Dupliquer la feuille</b> pour étudier une fermeture géométrique sans toucher au graphe d'origine. « Extraire vers une feuille » copie une zone sélectionnée.</li>

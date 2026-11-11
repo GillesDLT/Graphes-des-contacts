@@ -308,9 +308,17 @@ const SPEC_MODIFIERS = [
   ['L', '\u24C1', 'Condition de plus petite matière (mini matière)'],
   ['E', '\u24BA', 'Principe d’enveloppe (gabarit)'],
   ['T', '\u24C9', 'Exigence de tangence'],
-  ['F', '\u24BB', 'État libre (condition libre)']
+  ['F', '\u24BB', 'État libre (condition libre)'],
+  ['C', '\u24B8', 'C encerclé'], ['G', '\u24BC', 'G encerclé'],
+  ['N', '\u24C3', 'N encerclé'], ['X', '\u24CD', 'X encerclé'],
+  ['A', '\u24B6', 'A encerclé'], ['P', '\u24C5', 'P encerclé']
 ];
 const SPEC_MODIFIER_CHARS = new Map(SPEC_MODIFIERS.map(([id, ch]) => [id, ch]));
+/* Modificateurs dimensionnels ISO 14405 : placés à côté de la cote, et non
+   confondus avec les lettres encerclées du cadre géométrique. */
+const SPEC_SIZE_MODIFIERS = [['', 'Aucun'], ['LP', 'Taille locale à deux points'],
+  ['GG', 'Moindres carrés (Gauss)'], ['GC', 'Minimax (Tchebychev)'],
+  ['GN', 'Minimum circonscrit'], ['GX', 'Maximum inscrit']];
 const SPEC_TIPS = [['arrow', 'Flèche'], ['triangle', 'Triangle plein'], ['line', 'Trait simple']];
 const SPEC_TIP_IDS = new Set(SPEC_TIPS.map(([id]) => id));
 function specTip(t) { return SPEC_TIP_IDS.has(t.tip) ? t.tip : 'arrow'; }
@@ -326,8 +334,12 @@ function specCellText(cell) {
 function specFrameLayout(spec) {
   const m = isoMetrics(), h = m.letter, pad = ISO_STYLE.framePadFactor * h, minW = ISO_STYLE.frameWFactor * h;
   const cells = (spec.cells || []).map(cell => {
-    const text = specCellText(cell);
-    return { text, w: Math.max(minW, text ? textW(text, m.font) + 2 * pad : minW) };
+    const base = specCellText({ ...cell, mods: [] });
+    const mods = (cell.mods || []).filter(id => SPEC_MODIFIER_CHARS.has(id));
+    const baseW = base ? textW(base, m.font) : 0;
+    const modW = m.letter * 1.15;
+    const contentW = baseW + mods.length * modW;
+    return { text: specCellText(cell), base, mods, baseW, modW, contentW, w: Math.max(minW, contentW + 2 * pad) };
   });
   if (!cells.length) cells.push({ text: '', w: minW });
   return { cells, w: cells.reduce((a, c) => a + c.w, 0), h: ISO_STYLE.frameHFactor * h, letter: h, fontPx: m.fontPx };
@@ -338,7 +350,16 @@ function specFrameSVG(spec) {
   let x = spec.x;
   lay.cells.forEach((cell, i) => {
     if (i) s += `<line x1="${r1(x)}" y1="${r1(spec.y)}" x2="${r1(x)}" y2="${r1(spec.y + lay.h)}" stroke="${line}" stroke-width="${ISO_STYLE.strokeFrame}"/>`;
-    if (cell.text) s += `<text x="${r1(x + cell.w / 2)}" y="${r1(spec.y + lay.h / 2 + lay.letter / 2)}" text-anchor="middle" ${isoTextAttrs(m, false)} fill="${line}">${esc(cell.text)}</text>`;
+    let cx = x + (cell.w - (cell.contentW || 0)) / 2;
+    const cy = spec.y + lay.h / 2;
+    if (cell.base) s += `<text x="${r1(cx)}" y="${r1(cy + lay.letter / 2)}" ${isoTextAttrs(m, false)} fill="${line}">${esc(cell.base)}</text>`;
+    cx += cell.baseW || 0;
+    for (const mod of cell.mods || []) {
+      const mid = cx + cell.modW / 2, radius = lay.letter * 0.49 * 1.05;
+      s += `<circle cx="${r1(mid)}" cy="${r1(cy)}" r="${r1(radius)}" fill="none" stroke="${line}" stroke-width="${ISO_STYLE.strokeFrame}"/>` +
+        `<text x="${r1(mid)}" y="${r1(cy + lay.letter * 0.30)}" text-anchor="middle" font-family="${ISO_FONT}" font-size="${r1(lay.fontPx * 0.62 * 1.05)}" fill="${line}">${esc(mod)}</text>`;
+      cx += cell.modW;
+    }
     x += cell.w;
   });
   return s;
@@ -376,6 +397,17 @@ function specAnnotationText(spec) {
   if (a.toleranceMode === 'class') return `${base}${a.toleranceClass || ''}`;
   return base;
 }
+function specAnnotationWidth(spec) {
+  const a = spec.annotation || {};
+  if (!a.enabled) return 0;
+  const repeat = Math.max(1, Math.floor(Number(a.repeat) || 1));
+  const base = `${repeat > 1 ? `${repeat}x ` : ''}${a.diameter || ''}${a.value || ''}`;
+  const upper = String(a.toleranceUpper || ''), lower = String(a.toleranceLower || '');
+  const suffix = a.toleranceMode === 'symmetric' && upper ? `±${upper}` : a.toleranceMode === 'class' ? String(a.toleranceClass || '') : '';
+  const w = richTextWidth(base + suffix + upper + lower, 12);
+  const hasModifier = SPEC_SIZE_MODIFIERS.some(([id]) => id && id === a.sizeModifier);
+  return w + (hasModifier ? 5 + Math.max(24, textW(a.sizeModifier, '10px Arial, sans-serif') + 10) : 0);
+}
 function specAnnotationSVG(spec) {
   const a = spec.annotation || {}; if (!a.enabled) return '';
   const repeat = Math.max(1, Math.floor(Number(a.repeat) || 1));
@@ -391,7 +423,14 @@ function specAnnotationSVG(spec) {
     content += `<tspan x="${toleranceX}" baseline-shift="super" font-size="8">+${esc(upper)}</tspan><tspan x="${toleranceX}" baseline-shift="sub" font-size="8">−${esc(lower)}</tspan>`;
   }
   else if (a.toleranceMode === 'class' && a.toleranceClass) content += esc(a.toleranceClass);
-  return `<text x="${r1(baseX)}" y="${r1(baselineY)}" font-family="Arial, sans-serif" font-size="12" fill="#17191d" text-anchor="start" data-width="${r1(approxW)}">${content}</text>`;
+  let out = `<text x="${r1(baseX)}" y="${r1(baselineY)}" font-family="Arial, sans-serif" font-size="12" fill="#17191d" text-anchor="start" data-width="${r1(approxW)}">${content}</text>`;
+  const modifier = SPEC_SIZE_MODIFIERS.some(([id]) => id && id === a.sizeModifier) ? a.sizeModifier : '';
+  if (modifier) {
+    const x = baseX + approxW + 5, y = baselineY - 11, w = Math.max(24, textW(modifier, '10px Arial, sans-serif') + 10);
+    out += `<rect x="${r1(x)}" y="${r1(y)}" width="${r1(w)}" height="14" rx="7" fill="#fff" stroke="#17191d" stroke-width="1"/>` +
+      `<text x="${r1(x + w / 2)}" y="${r1(y + 10.5)}" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#17191d">${esc(modifier)}</text>`;
+  }
+  return out;
 }
 const SPEC_COMPLEMENT_SYMBOLS = [
   ['sym', '\u232F', 'Symétrie'], ['para', '\u2225', 'Parallélisme'],
@@ -449,18 +488,19 @@ function specSVG(spec) {
   const leaders = (spec.targets || []).map(t => specTargetSVG(spec, t)).join('');
   return `<g data-id="${spec.id}" data-kind="isoSpec" style="cursor:move"><title>Cadre de tolérance — glisser pour déplacer, double-clic pour modifier</title>${leaders}${specFrameSVG(spec)}${specAnnotationSVG(spec)}${specSupplementarySVG(spec)}</g>`;
 }
-/* Une spécification est rattachée à une seule pièce. */
+/* Une spécification peut être libre ou liée aux composants d'une seule pièce. */
 function createSpec(targetIds) {
   const targets = [...new Set(targetIds)].map(isoComponentFromId).filter(Boolean);
-  if (!targets.length) return null;
-  const ownerPieceId = isoTargetOwner(targets[0]);
-  if (!ownerPieceId || targets.some(target => isoTargetOwner(target) !== ownerPieceId)) return null;
+  const ownerPieceId = targets.length ? isoTargetOwner(targets[0]) : null;
+  if (targets.length && (!ownerPieceId || targets.some(target => isoTargetOwner(target) !== ownerPieceId))) return null;
   const centers = targets.map(isoTargetCenter).filter(Boolean);
-  if (!centers.length) return null;
-  const x0 = Math.min(...centers.map(point => point.x)), y0 = Math.min(...centers.map(point => point.y));
+  if (targets.length && !centers.length) return null;
+  const center = viewCenter();
+  const x0 = centers.length ? Math.min(...centers.map(point => point.x)) + 110 : center[0];
+  const y0 = centers.length ? Math.min(...centers.map(point => point.y)) - 70 : center[1];
   checkpoint();
   const spec = {
-    id: uid(), ownerPieceId, x: x0 + 110, y: y0 - 70,
+    id: uid(), ownerPieceId, x: x0, y: y0,
     cells: [{ sym: 'position', text: '', mods: [] }, { sym: '', text: '0,05', mods: [] }],
     annotation: { enabled: false, repeat: 1, diameter: '', value: '', toleranceMode: 'none', toleranceUpper: '', toleranceLower: '', toleranceClass: '', supplementary: [], complementaryData: {} },
     targets: targets.map(target => ({ ...target, tip: 'arrow' }))
@@ -477,7 +517,8 @@ function createSpec(targetIds) {
 function specPreviewHTML(spec) {
   const lay = specFrameLayout(spec), supplementary = specSupplementarySVG(spec);
   const extra = specSupplementaryWidth(spec);
-  return `<div class="spec-preview"><svg viewBox="${r1(spec.x - 8)} ${r1(spec.y - 24)} ${r1(lay.w + extra + 16)} ${r1(lay.h + 32)}">${specFrameSVG(spec)}${specAnnotationSVG(spec)}${supplementary}</svg></div>`;
+  const width = Math.max(lay.w + extra, specAnnotationWidth(spec) + 1);
+  return `<div class="spec-preview"><svg viewBox="${r1(spec.x - 8)} ${r1(spec.y - 24)} ${r1(width + 16)} ${r1(lay.h + 32)}">${specFrameSVG(spec)}${specAnnotationSVG(spec)}${supplementary}</svg></div>`;
 }
 const SPEC_COMPLEMENTARY_INDICATORS = [
   ['intersection', 'Indicateur de plan d’intersection'],
@@ -514,7 +555,7 @@ function specEditorHTML(spec) {
         <input type="text" data-spec-cell="${i}" data-f="text" value="${esc(c.text || '')}" placeholder="indication" title="Texte : valeur, référence, mesure…">
       </div>
       <div class="spec-mods">
-        ${SPEC_MODIFIERS.map(([id, ch, lab]) => `<button type="button" data-spec-mod="${i}" data-mod="${id}" class="${(c.mods || []).includes(id) ? 'active' : ''}" title="${esc(lab)}">${ch}</button>`).join('')}
+        ${SPEC_MODIFIERS.map(([id, ch, lab]) => `<button type="button" data-spec-mod="${i}" data-mod="${id}" aria-pressed="${(c.mods || []).includes(id)}" aria-label="${esc(lab)}" class="${(c.mods || []).includes(id) ? 'active' : ''}" title="${esc(lab)}"><span class="spec-mod-circle">${esc(id)}</span></button>`).join('')}
         <span class="spec-cell-acts">
           <button type="button" data-spec-cell-act="left" data-i="${i}" title="Déplacer la section à gauche"${i ? '' : ' disabled'}>◀</button>
           <button type="button" data-spec-cell-act="right" data-i="${i}" title="Déplacer la section à droite"${i < spec.cells.length - 1 ? '' : ' disabled'}>▶</button>
@@ -538,6 +579,7 @@ function specEditorHTML(spec) {
       <label>Répétitions <input type="number" min="1" step="1" data-spec-ann="repeat" value="${Math.max(1, Number(ann.repeat) || 1)}"></label>
       <label>Diamètre <select data-spec-ann="diameter" aria-label="Symbole de diamètre">${[['','Aucun'],['Ø','Ø']].map(([v,l])=>`<option value="${esc(v)}" ${ann.diameter===v?'selected':''}>${l}</option>`).join('')}</select></label>
       <label>Texte <input type="text" data-spec-ann="value" value="${esc(ann.value || '')}" placeholder="ex. 5" aria-label="Texte de spécification"></label>
+      <label>Modificateur de taille <select data-spec-ann="sizeModifier" aria-label="Modificateur de taille">${SPEC_SIZE_MODIFIERS.map(([id, label]) => `<option value="${id}" ${(ann.sizeModifier || '') === id ? 'selected' : ''}>${id ? id + ' — ' : ''}${esc(label)}</option>`).join('')}</select></label>
       <label>Tolérance <select data-spec-ann="toleranceMode" aria-label="Type de tolérance">${[['none','Aucune'],['symmetric','± même valeur'],['asymmetric','+ / − valeurs différentes'],['class','Classe (ex. E6)']].map(([v,l])=>`<option value="${v}" ${toleranceMode===v?'selected':''}>${l}</option>`).join('')}</select></label>
       ${toleranceMode === 'symmetric' ? `<label>± <input type="text" data-spec-ann="toleranceUpper" value="${esc(ann.toleranceUpper || '')}" placeholder="0,1"></label>` : ''}
       ${toleranceMode === 'asymmetric' ? `<label>Exposant (+) <input type="text" data-spec-ann="toleranceUpper" value="${esc(ann.toleranceUpper || '')}" placeholder="0,1"></label><label>Indice (−) <input type="text" data-spec-ann="toleranceLower" value="${esc(ann.toleranceLower || '')}" placeholder="0,0"></label>` : ''}
@@ -546,7 +588,8 @@ function specEditorHTML(spec) {
   return `
     ${specPreviewHTML(spec)}
     ${annotationEditor}
-    <h4>Sections</h4>
+    <h4>Sections du cadre</h4>
+    <p class="muted">Choisissez un symbole et un texte, puis activez les indicateurs encerclés souhaités.</p>
     ${cells}
     <div class="btns"><button type="button" data-spec-cell-act="add">＋ Section</button></div>
     <h4>Indications complémentaires</h4>
@@ -589,7 +632,7 @@ function wireSpecEditor(root, spec, redraw) {
       const key = inp.dataset.specAnn;
       spec.annotation[key] = key === 'enabled' ? inp.checked : key === 'repeat' ? Math.max(1, Math.floor(Number(inp.value) || 1)) : inp.value;
       if (key === 'repeat') inp.value = spec.annotation.repeat;
-      if (key === 'toleranceMode') { changed(); if (redraw) redraw(); return; }
+      if (key === 'toleranceMode' || key === 'sizeModifier') { changed(); if (redraw) redraw(); return; }
       render(); autosave(); redrawPreview();
     };
     inp.addEventListener(inp.type === 'checkbox' || inp.tagName === 'SELECT' ? 'change' : 'input', update);
@@ -637,6 +680,6 @@ function wireSpecEditor(root, spec, redraw) {
     spec.targets.splice(+btn.dataset.i, 1);
   })));
   $$('[data-spec-addlink]', root).forEach(btn => btn.addEventListener('click', () => {
-    setTool('spec'); editSpecId = spec.id; render(); updateTip();
+    closeModal(); setTool('spec'); editSpecId = spec.id; render(); updateTip();
   }));
 }

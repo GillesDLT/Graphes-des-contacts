@@ -123,7 +123,11 @@ let storageBlocked = false;
 function autosave() {
   clearTimeout(saveTimer);
   if (storageBlocked) return;
-  saveTimer = setTimeout(() => { try { localStorage.setItem(LS_KEY, JSON.stringify(doc)); } catch (e) { toast('Enregistrement local impossible : ' + e.message); } }, 300);
+  saveTimer = setTimeout(() => {
+    if (typeof Projects !== 'undefined') Projects.save(doc);
+    else try { localStorage.setItem(LS_KEY, JSON.stringify(doc)); } catch (e) { toast('Enregistrement local impossible : ' + e.message); }
+    if (typeof Collab !== 'undefined') Collab.onLocalChange();
+  }, 300);
 }
 function loadDoc(o) {
   if (!o || !Array.isArray(o.sheets) || !o.sheets.length) throw new Error('Fichier invalide');
@@ -460,7 +464,8 @@ function contentBBox(sheet = S()) {
   sheet.groups.forEach(g => groupPoints(g).forEach(p => pts.push(p)));
   if (doc.settings.showSpecs !== false) (sheet.isoSpecs || []).forEach(sp => {
     const lay = specFrameLayout(sp);
-    pts.push([sp.x, sp.y], [sp.x + lay.w, sp.y + lay.h]);
+    pts.push([sp.x, sp.y], [sp.x + lay.w + specSupplementaryWidth(sp), sp.y + lay.h]);
+    if (sp.annotation?.enabled) pts.push([sp.x, sp.y - 20], [sp.x + specAnnotationWidth(sp) + 1, sp.y - 20]);
     (sp.targets || []).forEach(t => {
       const c = isoTargetCenter(t); if (!c) return;
       pts.push([c.x, c.y]);
@@ -539,7 +544,6 @@ function deleteIds(ids) {
   s.isoRefs = (s.isoRefs || []).filter(x => !del.has(x.id) && !del.has(x.targetId) && (x.targetKind !== 'group' || s.groups.some(g => g.id === x.targetId)));
   s.isoSpecs = (s.isoSpecs || []).filter(x => !del.has(x.id));
   s.isoSpecs.forEach(sp => sp.targets = (sp.targets || []).filter(t => !del.has(t.targetId)));
-  s.isoSpecs = s.isoSpecs.filter(sp => sp.targets.length);
   cleanupOrphans(s);
 }
 function cleanupOrphans(s = S()) {
@@ -564,7 +568,6 @@ function cleanupOrphans(s = S()) {
     return cf && s.surfaces.some(f => (cf.a === f.id || cf.b === f.id) && g.members.includes(f.pieceId));
   }));
   s.groups = s.groups.filter(g => g.members.length);
-  const pieceIds = new Set(s.pieces.map(piece => piece.id));
   const surfaceById = new Map(s.surfaces.map(surface => [surface.id, surface]));
   const componentForPiece = pieceId => {
     const surface = s.surfaces.find(item => item.pieceId === pieceId);
@@ -608,18 +611,11 @@ function cleanupOrphans(s = S()) {
   });
   s.isoSpecs = (s.isoSpecs || []).filter(spec => {
     let targets = (spec.targets || []).map(normalizeComponentTarget).filter(Boolean);
-    let owner = pieceIds.has(spec.ownerPieceId) ? spec.ownerPieceId : (targets.length ? componentOwner(targets[0]) : null);
-    if (!owner) return false;
-    targets = targets.filter(target => componentOwner(target) === owner);
+    const owner = targets.length ? componentOwner(targets[0]) : null;
+    targets = owner ? targets.filter(target => componentOwner(target) === owner) : [];
     const unique = new Map(targets.map(target => [target.targetKind + ':' + target.targetId, target]));
-    targets = [...unique.values()];
-    if (!targets.length) {
-      const fallback = componentForPiece(owner);
-      if (fallback) targets = [fallback];
-    }
-    if (!targets.length) return false;
-    spec.ownerPieceId = owner;
-    spec.targets = targets;
+    spec.targets = [...unique.values()];
+    spec.ownerPieceId = spec.targets.length ? owner : null;
     return true;
   });
   const repetitions = new Set(s.groups.filter(g => g.kind === 'rep').map(g => g.id));
@@ -634,7 +630,6 @@ function collect(ids) {
     const k = kindOf(id);
     if (k === 'piece') pids.add(id);
     if (k === 'isoRef') { const ref = (s.isoRefs || []).find(x => x.id === id); if (ref?.ownerPieceId) pids.add(ref.ownerPieceId); }
-    if (k === 'isoSpec') { const spec = (s.isoSpecs || []).find(x => x.id === id); if (spec?.ownerPieceId) pids.add(spec.ownerPieceId); }
     if (k === 'cfg') { const c = C(id); pids.add(SF(c.a).pieceId); pids.add(SF(c.b).pieceId); }
     if (k === 'group') {
       const g = G(id);
@@ -660,7 +655,10 @@ function collect(ids) {
   });
   const notes = (s.notes || []).filter(n => noteIds.has(n.id));
   const isoRefs = (s.isoRefs || []).filter(r => isoRefIds.has(r.id) || pids.has(r.ownerPieceId));
-  const isoSpecs = (s.isoSpecs || []).filter(x => isoSpecIds.has(x.id) || pids.has(x.ownerPieceId));
+  const isoSpecs = (s.isoSpecs || []).filter(x => isoSpecIds.has(x.id) || pids.has(x.ownerPieceId)).map(x => {
+    if (!isoSpecIds.has(x.id)) return x;
+    return { ...clone(x), ownerPieceId: null, targets: [] };
+  });
   return clone({ pieces, surfaces, liaisons, groups, cfgs, cycles, notes, isoRefs, isoSpecs, cycleSnapshot: !!s.cycleSnapshot, from: s.id });
 }
 function pasteData(data, offset) {

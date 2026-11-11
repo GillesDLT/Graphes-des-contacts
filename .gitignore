@@ -24,3 +24,8 @@ Desktop.ini
 node_modules/
 coverage/
 _site/
+
+# Serveur de partage : dépendances et base des graphes partagés
+server/node_modules/
+server/data/
+server/*.sqlite

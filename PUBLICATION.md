@@ -25,10 +25,40 @@ et doivent être réimportées.
 Le ZIP contient l'outil, pas tes documents de travail ni les images temporaires.
 Ne pas travailler directement à l'intérieur du ZIP.
 
+## 1 bis. Activer le partage en direct (optionnel)
+
+GitHub Pages sert uniquement des fichiers : le partage à plusieurs nécessite un
+petit serveur, fourni dans le dossier `server/` (un fichier Node.js, une
+dépendance `ws`, une base SQLite créée automatiquement). Voir
+`server/README.md` pour le démarrage, systemd et l'accès depuis Internet.
+
+Une fois le serveur en place, renseigner son adresse **en HTTPS** dans
+`collab.config.js` avant de publier :
+
+```js
+window.GRAPHE_COLLAB = { server: 'https://graphe.mondomaine.fr' };
+```
+
+Deux points à ne pas oublier :
+
+- une page servie en `https://` (GitHub Pages) **ne peut pas** appeler un
+  serveur en `http://` — le navigateur bloque le contenu mixte. Il faut donc un
+  certificat ou un tunnel (Cloudflare Tunnel, par exemple) ;
+- le site publié et le serveur doivent rester accessibles en même temps : si le
+  serveur tombe, l'application continue de fonctionner en local (l'URL
+  `…/index.html` sans `#/b/…`), et les graphes partagés restent modifiables
+  hors ligne puis se resynchronisent.
+
+Sans serveur configuré, tout le reste de l'application fonctionne normalement ;
+seuls les boutons **Partager** et les liens `#/b/…` sont inactifs.
+
 ## 2. Préparer les fichiers à publier
 
 La racine du dépôt doit contenir `index.html`, `style.css` et tous les fichiers
-`.js` de l'application.
+`.js` de l'application (y compris `sync-core.js`, `projects.js`, `collab.js` et
+`collab.config.js`). Le dossier `server/` n'est pas nécessaire au site publié :
+il ne doit pas être déployé sur Pages, et son dossier `server/data/` (base des
+graphes partagés) ne doit jamais être envoyé sur GitHub.
 
 Les fichiers complémentaires fournis sont :
 

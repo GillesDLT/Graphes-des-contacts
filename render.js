@@ -299,14 +299,9 @@ function render() {
     (doc.settings.showIsoRefs === false ? '' : (s.isoRefs || []).map(isoRefSVG).join('')) +
     (doc.settings.showSpecs === false ? '' : (s.isoSpecs || []).map(specSVG).join(''));
   renderOverlay();
+  if (typeof Collab !== 'undefined') Collab.renderPeers();
   $$('[data-tool]').forEach(b => b.classList.toggle('active', b.dataset.tool === tool));
   $('[data-act=details]').classList.toggle('active', !!doc.settings.showDetails);
-  const surfacesButton = $('[data-act=surfaces]');
-  surfacesButton.classList.toggle('active', doc.settings.showSurfaces !== false);
-  surfacesButton.setAttribute('aria-pressed', String(doc.settings.showSurfaces !== false));
-  $('[data-act=grid]').classList.toggle('active', !!doc.settings.grid);
-  $('[data-act=torseurs]').classList.toggle('active', !!doc.settings.showTorseurs);
-  $('[data-act=nominal0]').classList.toggle('active', !!(s.showNominalZero ?? doc.settings.showNominalZero));
   stage.className = stage.className.replace(/\bt-\w+/g, '').trim() + ' t-' + tool;
 }
 
@@ -406,7 +401,7 @@ function renderPickbar() {
   if (tool === 'spec') {
     const sp = editSpecId && (S().isoSpecs || []).find(x => x.id === editSpecId);
     const html = sp
-      ? `<span><b>Spécification</b> : ${sp.targets.length} composant(s) lié(s) à <span class="cnt">${esc(specTargetLabel(sp.targets[0] || {}))}</span> — clic pour ajouter / retirer un composant de la même pièce</span><button class="primary" data-pb="ok">✔ Terminer <span class="kbd" style="color:#333">Entrée</span></button><button data-pb="cancel">Fermer</button>`
+      ? `<span><b>Spécification</b> : ${sp.targets.length} composant(s) lié(s)${sp.targets.length ? ` à <span class="cnt">${esc(specTargetLabel(sp.targets[0]))}</span>` : ' — cadre libre'} — clic pour ajouter / retirer un composant de la même pièce</span><button class="primary" data-pb="ok">✔ Terminer <span class="kbd" style="color:#333">Entrée</span></button><button data-pb="cancel">Fermer</button>`
       : `<span><b>Spécification</b> : <span class="cnt">${pick.length} composant(s)</span> — surfaces et groupes d’une seule pièce</span><button class="primary" data-pb="ok" ${pick.length ? '' : 'disabled'}>✔ Créer le cadre <span class="kbd" style="color:#333">Entrée</span></button><button data-pb="cancel">Annuler</button><span id="pickErr" class="err" role="alert"></span>`;
     if (pb.dataset.h !== html) { pb.innerHTML = html; pb.dataset.h = html; }
     pb.classList.add('show');
@@ -423,7 +418,7 @@ function renderPickbar() {
 /* ===== Onglets (feuilles) ===== */
 function renderTabs() {
   const t = $('#tabs');
-  t.innerHTML = doc.sheets.map(s => `<div class="tab ${s.id === doc.active ? 'active' : ''}" data-sheet="${s.id}" title="Double-clic pour renommer">${esc(s.name)}${doc.sheets.length > 1 ? `<span class="x" data-delsheet="${s.id}" title="Supprimer la feuille">✕</span>` : ''}</div>`).join('') +
+  t.innerHTML = doc.sheets.map(s => `<div class="tab ${s.id === doc.active ? 'active' : ''}" data-sheet="${s.id}" draggable="true" title="Glisser pour changer l'ordre — double-clic pour renommer">${esc(s.name)}${doc.sheets.length > 1 ? `<span class="x" data-delsheet="${s.id}" title="Supprimer la feuille">✕</span>` : ''}</div>`).join('') +
     `<button data-act="addsheet" title="Nouvelle feuille vide">＋</button><button data-act="dupsheet" title="Dupliquer la feuille">⧉ Dupliquer la feuille</button>`;
 }
 
