@@ -80,6 +80,7 @@ function piecePanel(p) {
     <h4>Surfaces (${surfs.length})</h4>
     <div>${surfs.map(s => `<button data-goto="${s.id}" style="margin:2px">${esc(sname(s))}</button>`).join('') || '<span class="muted">aucune</span>'}</div>
     <div class="btns"><button data-pa="linkfrom">⟷ Lier à une autre pièce…</button>
+    <button data-pa="addsurface" title="Ajouter une surface libre : une bulle isolée, sans liaison ni CF">◦ Surface libre</button>
     <button data-pa="dup">⧉ Dupliquer</button><button data-pa="del" class="danger">🗑 Supprimer</button></div>`;
 }
 function surfPanel(s) {
@@ -97,7 +98,8 @@ function surfPanel(s) {
     ${cf ? `<h4>Surface de ${esc(cfDisplayName(cf))}</h4><button data-goto="${cf.id}">Modifier ${esc(cfDisplayName(cf))}</button><p class="muted">Supprimer cette surface supprime ses liaisons et sa CF, ainsi que les cycles associés ; l’autre surface de la CF est supprimée seulement si elle devient inutile.</p>` : ''}
     <h4>Liaisons (${ls.length})</h4>
     <div>${ls.map(l => `<button data-goto="${l.id}" style="margin:2px">${esc(liaisonLabel(l))}</button>`).join('') || '<span class="muted">aucune</span>'}</div>
-    <div class="btns">${s.name ? '<button data-pa="nameauto" title="Effacer le nom libre et revenir au nom automatique">↺ Nom automatique</button>' : ''}<button data-pa="del" class="danger" title="Supprime aussi les liens et les cycles qui dépendent de cette surface">🗑 Supprimer ${cf ? '(avec sa CF)' : '(avec ses liaisons)'}</button></div>`;
+    ${s.free ? '<p class="muted">Surface libre : bulle isolée, conservée même sans liaison ni CF. Choisissez-la comme « surface existante » dans une liaison ou une CF pour la relier ; supprimer cette liaison supprime alors les deux surfaces si elles ne sont plus reliées à rien.</p>' : ''}
+    <div class="btns">${s.name ? '<button data-pa="nameauto" title="Effacer le nom libre et revenir au nom automatique">↺ Nom automatique</button>' : ''}<button data-pa="del" class="danger" title="Supprime aussi les liens et les cycles qui dépendent de cette surface">🗑 Supprimer ${cf ? '(avec sa CF)' : s.free && !ls.length ? 'la surface libre' : '(avec ses liaisons)'}</button></div>`;
 }
 function linkPanel(l) {
   const sa = SF(l.a), sb = SF(l.b), pa = P(sa.pieceId), pb = P(sb.pieceId), t = ltype(l.type);
@@ -275,6 +277,14 @@ function propAction(a, t, btn) {
     case 'del': doDelete(); break;
     case 'dup': duplicateSel(); break;
     case 'linkfrom': setTool('liaison'); pick = [t.id]; render(); updateTip(); break;
+    case 'addsurface': {
+      if (!P(t.id) || isHiddenPiece(t.id)) return toast('Développez le groupe fonctionnel (bouton +) pour ajouter une surface à cette pièce.');
+      checkpoint();
+      const s = createFreeSurface(t.id, doc.settings.surfaceTypes[0]?.code || 'PL', null, -Math.PI / 4);
+      cleanupOrphans(); sel.clear(); sel.add(s.id); changed();
+      toast('Surface libre créée — elle reste seule sur le graphe tant qu’aucune liaison ni CF ne la relie.');
+      break;
+    }
     case 'editlink': { const sa = SF(t.a), sb = SF(t.b); liaisonDialog(sa.pieceId, sb.pieceId, t.id); break; }
     case 'editmembers': startGroupTool(t.kind, t.members, t.id, t.cfIds || [], t.repLabelIds || []); break;
     case 'collapse': toggleCollapse(t); break;

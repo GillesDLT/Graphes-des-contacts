@@ -435,6 +435,7 @@ const TIPS = {
   pipette: '<b>Clic</b> sur un élément pour prélever sa couleur',
   paint: '<b>Clic</b> sur un élément pour lui appliquer la couleur courante',
   note: '<b>Clic</b> sur le graphe pour ajouter une note. Elle se déplace ensuite avec l’outil Déplacer — <b>N</b>',
+  surface: '<b>Clic</b> sur une pièce pour ajouter une <b>surface libre</b> : une bulle isolée, sans liaison ni CF — <b>U</b>',
   spec: '<b>Clic</b> sur une surface ou un groupe de surface pour choisir les composants d’une seule pièce, puis <b>Entrée</b>. La spécification est liée à ces composants et suit la pièce. Les sections et indications se règlent dans le panneau de droite.',
   isoRef: '<b>Clic</b> sur une surface ou un groupe de surfaces d’une seule pièce pour y appliquer un indicateur ISO.'
 };

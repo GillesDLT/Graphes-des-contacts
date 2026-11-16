@@ -272,6 +272,19 @@ svg.addEventListener('pointerdown', e => {
   }
   if (tool === 'paint') { const o = h && obj(h.id); if (o) { checkpoint(); if (kindOf(o.id) === 'cfg') setCFColor(o, $('#curColor').value); else o.color = $('#curColor').value; changed(); } return; }
   if (tool === 'piece') { if (!h || h.kind === 'group') pieceDialog(pt); else { sel.clear(); sel.add(h.id); changed(); } return; }
+  if (tool === 'surface') {
+    const pid = pieceOfHit(h);
+    if (!pid) return toast('Cliquez sur une pièce pour y ajouter une surface libre (bulle sans liaison).');
+    const p = P(pid);
+    if (isHiddenPiece(pid)) return toast('Développez le groupe fonctionnel (bouton +) pour ajouter une surface à cette pièce.');
+    checkpoint();
+    const s = createFreeSurface(pid, doc.settings.surfaceTypes[0]?.code || 'PL', pt, Math.atan2(pt.y - p.y, pt.x - p.x));
+    cleanupOrphans();
+    sel.clear(); sel.add(s.id);
+    changed(); updateTip();
+    toast('Surface libre créée — elle reste seule sur le graphe tant qu’aucune liaison ni CF ne la relie.');
+    return;
+  }
   if (tool === 'note') { noteDialog(pt); return; }
   if (tool === 'liaison') {
     const pid = pieceOfHit(h);
@@ -547,7 +560,7 @@ svg.addEventListener('wheel', e => {
 }, { passive: false });
 
 /* ===== Clavier ===== */
-const TOOL_KEYS = { h: 'select', v: 'select', p: 'piece', l: 'liaison', r: 'rep', g: 'fonc', t: 'ref', c: 'cfg', y: 'cycle', n: 'note', i: 'pipette', b: 'paint', s: 'spec' };
+const TOOL_KEYS = { h: 'select', v: 'select', p: 'piece', l: 'liaison', r: 'rep', g: 'fonc', t: 'ref', c: 'cfg', y: 'cycle', n: 'note', i: 'pipette', b: 'paint', s: 'spec', u: 'surface' };
 document.addEventListener('keydown', e => {
   if (modalOpen) return;
   const tag = (e.target.tagName || '').toLowerCase();

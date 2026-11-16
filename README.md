@@ -26,6 +26,9 @@ projets ou comptes rendus.
   **retours à la ligne**, se **déplace librement** (glisser) et se recentre par
   double-clic ou un bouton du panneau.
 - Créer des liaisons avec leurs deux surfaces de contact.
+- Ajouter une **surface libre** — une bulle seule, sans liaison ni CF : outil
+  **◦ Surface libre** (`U`, clic sur une pièce) ou bouton du panneau de la pièce.
+  Elle se relie ensuite comme n’importe quelle surface existante.
 - Choisir les types de surfaces et de liaisons, leurs couleurs et leurs
   répétitions ; masquer ou réafficher les symboles et noms des surfaces sans
   masquer les liaisons.
@@ -161,6 +164,16 @@ Le bouton **?** ouvre une aide plus détaillée dans l’application. Les spéci
 ### Surfaces et liaisons
 
 L’option **Afficher les surfaces** dans Paramètres masque ou réaffiche les symboles et noms des surfaces. Les liaisons restent visibles et les surfaces sont dessinées derrière elles lorsqu’elles sont affichées. Le masquage est visuel : les surfaces restent sélectionnables.
+
+Une surface est normalement créée avec une liaison ou une CF. L’outil
+**◦ Surface libre** (`U`) ou le bouton **◦ Surface libre** du panneau de la pièce
+ajoute une **bulle isolée**, sans aucun lien : elle est conservée telle quelle,
+même sans liaison. Pour la relier, la choisir comme **surface existante** dans la
+fenêtre d’une liaison ou d’une CF.
+
+La règle de suppression reste la même : supprimer une liaison (ou une CF) supprime
+ses **deux surfaces** dès qu’elles ne sont plus reliées à rien — une surface libre
+comprise. Une surface encore utilisée par une autre liaison est conservée.
 
 ### Organiser les pièces
 

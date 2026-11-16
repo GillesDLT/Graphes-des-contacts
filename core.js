@@ -516,6 +516,12 @@ function createSurface(pid, type, at, angle = -Math.PI / 4) {
   s.ang = at ? angleOnPiece(p, at.x, at.y) : Math.atan2(Math.sin(angle) / p.ry, Math.cos(angle) / p.rx);
   S().surfaces.push(s); return s;
 }
+/* Surface libre : bulle isolée, conservée sans liaison ni CF (voir deleteIds / cleanupOrphans). */
+function createFreeSurface(pid, type, at, angle = -Math.PI / 4) {
+  const s = createSurface(pid, type, at, angle);
+  s.free = true;
+  return s;
+}
 function createLiaison(a, b, type, count, details) {
   const l = { id: uid(), a, b, type, count, details: details || {}, color: '#333333', w: 1.4, label: '', t: 0.5 };
   S().liaisons.push(l); return l;
@@ -528,14 +534,24 @@ function createGroup(kind, members, cfIds = [], repLabelIds = []) {
   S().groups.unshift(g); return g;
 }
 /* ===== Suppression =====
-   Une surface n'existe que par une liaison : supprimer une surface supprime ses liaisons,
-   supprimer une liaison supprime les surfaces devenues orphelines. */
+   Une surface n'existe que par une liaison — sauf une surface libre (bulle isolée).
+   Supprimer une surface supprime ses liaisons ; supprimer une liaison supprime ses deux
+   surfaces si elles ne sont plus reliées à rien, surface libre comprise. */
 function deleteIds(ids) {
-  const s = S(); const del = new Set(ids);
+  const s = S(); const del = new Set(ids), detached = new Set();
   s.surfaces.forEach(x => { if (del.has(x.pieceId)) del.add(x.id); });
-  connections(s).forEach(x => { if (del.has(x.a) || del.has(x.b)) del.add(x.id); });
-  s.pieces = s.pieces.filter(x => !del.has(x.id));
-  s.surfaces = s.surfaces.filter(x => !del.has(x.id));
+  connections(s).forEach(x => {
+    if (del.has(x.id) || del.has(x.a) || del.has(x.b)) { detached.add(x.a); detached.add(x.b); }
+    if (del.has(x.a) || del.has(x.b)) del.add(x.id);
+  });
+  /* Surfaces encore reliées après l'opération ; une surface libre n'est perdue que si la
+     suppression vient de lui retirer sa liaison. */
+  const linked = new Set();
+  connections(s).forEach(x => { if (!del.has(x.id) && !del.has(x.a) && !del.has(x.b)) { linked.add(x.a); linked.add(x.b); } });
+  const dropped = new Set(del);
+  s.surfaces.forEach(x => { if (!dropped.has(x.id) && !linked.has(x.id) && (!x.free || detached.has(x.id))) dropped.add(x.id); });
+  s.pieces = s.pieces.filter(x => !dropped.has(x.id));
+  s.surfaces = s.surfaces.filter(x => !dropped.has(x.id));
   s.liaisons = s.liaisons.filter(x => !del.has(x.id));
   s.cfgs = s.cfgs.filter(x => !del.has(x.id));
   s.groups = s.groups.filter(x => !del.has(x.id));
@@ -558,7 +574,7 @@ function cleanupOrphans(s = S()) {
     if (nc.length !== s.cfgs.length) { s.cfgs = nc; again = true; }
     const used = new Set(); connections(s).forEach(l => { used.add(l.a); used.add(l.b); });
     if (s.cycleSnapshot) s.cycles.forEach(c => cycleContents(c, s).surfaces.forEach(id => used.add(id)));
-    const ns = s.surfaces.filter(x => used.has(x.id));
+    const ns = s.surfaces.filter(x => used.has(x.id) || x.free);
     if (ns.length !== s.surfaces.length) { s.surfaces = ns; again = true; }
   }
   const alive = new Set([...s.pieces.map(p => p.id), ...s.surfaces.map(x => x.id)]);
