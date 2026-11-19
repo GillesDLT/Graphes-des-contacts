@@ -161,6 +161,11 @@ function loadDoc(o) {
       if (ann.toleranceClass == null) ann.toleranceClass = '';
       if (!Array.isArray(ann.supplementary)) ann.supplementary = [];
       if (!ann.complementaryData || typeof ann.complementaryData !== 'object') ann.complementaryData = {};
+      if (!Array.isArray(ann.badges)) ann.badges = [];
+      ann.badges = ann.badges.filter(b => b && typeof b === 'object').map(b => b.kind === 'E'
+        ? { id: b.id || uid(), kind: 'E' }
+        : { id: b.id || uid(), kind: 'text', text: String(b.text || '') });
+      ann.textOnly = !!ann.textOnly;
     });
     migrateCFs(s);
     s.pieces.forEach(p => {

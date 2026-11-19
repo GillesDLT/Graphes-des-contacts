@@ -397,8 +397,8 @@ function renderOverlay() {
     } else if (kd === 'isoSpec') {
       const sp = (S().isoSpecs || []).find(x => x.id === id);
       if (doc.settings.showSpecs !== false && sp) {
-        const lay = specFrameLayout(sp);
-        o += `<rect x="${r1(sp.x)}" y="${r1(sp.y)}" width="${r1(lay.w)}" height="${r1(lay.h)}" fill="none" stroke="${blue}" stroke-width="${sw}" stroke-dasharray="${5 / k} ${3 / k}" pointer-events="none"/>`;
+        const lay = specFrameLayout(sp), box = (specTextOnly(sp) && specAnnotationBox(sp)) || { x: sp.x, y: sp.y, w: lay.w, h: lay.h };
+        o += `<rect x="${r1(box.x)}" y="${r1(box.y)}" width="${r1(box.w)}" height="${r1(box.h)}" fill="none" stroke="${blue}" stroke-width="${sw}" stroke-dasharray="${5 / k} ${3 / k}" pointer-events="none"/>`;
         if (tool === 'select') (sp.targets || []).forEach((t, ti) => {
           const e = specTargetElbow(sp, t);
           o += `<circle data-spec-bend="${sp.id}" data-ti="${ti}" cx="${r1(e.x)}" cy="${r1(e.y)}" r="${7 / k}" fill="white" stroke="${blue}" stroke-width="${2 / k}"><title>Glisser pour déplacer le coude du lien</title></circle>`;

@@ -64,7 +64,7 @@ function isoRefPanel(r) {
 }
 function isoSpecPanel(sp) {
   return `<h3>${ISO_SPEC_ICON} Spécification</h3>` + specEditorHTML(sp) +
-    `<p class="muted">Glissez le cadre pour le déplacer ; les poignées bleues déplacent le coude de chaque lien. Le cadre peut être libre ou lié à des surfaces et groupes d’une seule pièce, qu’il suit. Copier-coller une spécification crée un cadre libre sans pièce, surface ni lien. Chaque lien se règle en flèche, triangle plein ou trait simple. Double-clic sur le cadre pour l’éditer dans une fenêtre.</p>
+    `<p class="muted">Glissez le cadre pour le déplacer ; les poignées bleues déplacent le coude de chaque lien. Le cadre peut être libre ou lié à des surfaces et groupes d’une seule pièce, qu’il suit. Copier-coller une spécification crée un cadre libre sans pièce, surface ni lien. Chaque lien se règle en flèche, triangle plein ou trait simple. Le (E) et les lettres encadrées suivent la cote ; « Cacher le cadre » masque le cadre et fait partir les liens du soulignement. Double-clic sur le cadre pour l’éditer dans une fenêtre.</p>
     <div class="btns"><button data-pa="del" class="danger">🗑 Supprimer</button></div>`;
 }
 function piecePanel(p) {

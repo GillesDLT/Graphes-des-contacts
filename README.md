@@ -292,7 +292,25 @@ pour masquer / afficher leurs symboles (utile avant export).
 Les indications adjacentes non encadrées se placent en haut à gauche du cadre :
 répétition (sans « 1x » si elle vaut 1), symbole de diamètre, valeur et tolérance.
 Le sélecteur **Modificateur de taille** ajoute LP, GG, GC, GN ou GX à la cote
-adjacente, dans un cartouche arrondi (et non dans le cadre de tolérance). Après les sections, la partie « Indication
+adjacente, dans un cartouche arrondi (et non dans le cadre de tolérance).
+
+Sous la cote, une rangée de badges ajoute d’autres symboles à sa suite, sur la
+même ligne et dans l’ordre d’ajout : le bouton **Ⓔ E** pose le principe
+d’enveloppe en un clic, et le champ de lettres libres (par exemple « SX ») crée
+un **oblong** autour du texte, réduit à un **cercle** quand il n’y a qu’une seule
+lettre. Chaque badge se réordonne (◀ ▶) ou se supprime.
+
+L’option **👁 Cacher le cadre**, placée à côté du titre « Sections du cadre »,
+masque le cadre de tolérance et ses indications complémentaires : il ne reste que
+le texte de la cote et ses badges, soulignés. Les liens vers les composants
+partent alors du soulignement, et la spécification reste liée à sa pièce (les
+sections sont conservées et réapparaissent quand l’option est désactivée).
+
+Sur le cadre, le dernier segment de chaque lien arrive perpendiculairement à
+l’arête : vertical quand le coude est au-dessous (ou au-dessus), horizontal quand
+il est sur le côté.
+
+Après les sections, la partie « Indication
 complémentaire » propose les quatre types d’indicateurs ; leurs symboles graphiques
 seront ajustés à partir de la référence fournie. Les liens vers les composants se
 règlent en flèche, triangle plein ou trait simple. Les quatre types d’indication
