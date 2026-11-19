@@ -85,7 +85,7 @@ function piecePanel(p) {
 }
 function surfPanel(s) {
   const p = P(s.pieceId), ls = S().liaisons.filter(l => l.a === s.id || l.b === s.id);
-  const cf = cfOfSurface(s.id);
+  const cfs = cfOfSurfaceList(s.id), cf = cfs[0];
   return `<h3>◦ Surface <b>${esc(sname(s))}</b></h3>
     ${fRow('Pièce', `<button data-goto="${p.id}">${esc(p.name)} (${p.num})</button>`)}
     ${fRow('Type', fSel('type', s.type, doc.settings.surfaceTypes.map(t => [t.code, t.code + ' — ' + t.label])))}
@@ -94,12 +94,12 @@ function surfPanel(s) {
     ${fRow('Nom libre', fText('name', s.name, `${s.type}.${p.num}.${s.idx} (auto)`))}
     ${fRow('Couleur', fColor('color'))}
     ${fRow('Contour', fColor('stroke'))}
-    ${fRow('Placement', fCheck('auto', !s.pinned, 'Automatique (suit les liaisons)'))}
-    ${cf ? `<h4>Surface de ${esc(cfDisplayName(cf))}</h4><button data-goto="${cf.id}">Modifier ${esc(cfDisplayName(cf))}</button><p class="muted">Supprimer cette surface supprime ses liaisons et sa CF, ainsi que les cycles associés ; l’autre surface de la CF est supprimée seulement si elle devient inutile.</p>` : ''}
+    ${fRow('Placement', fCheck('auto', !(hostMap.has(s.pieceId) ? s.cpinned : s.pinned), hostMap.has(s.pieceId) ? 'Automatique sur le groupe réduit (suit les liaisons)' : 'Automatique (suit les liaisons)'))}
+    ${cfs.length ? `<h4>${cfs.length > 1 ? 'Surfaces de CF partagée' : 'Surface de ' + esc(cfDisplayName(cf))}</h4><div class="btns">${cfs.map(c => `<button data-goto="${c.id}">Modifier ${esc(cfDisplayName(c))}</button>`).join('')}</div><p class="muted">Supprimer cette surface supprime ses liaisons et ${cfs.length > 1 ? 'ses ' + cfs.length + ' CF' : 'sa CF'}, ainsi que les cycles associés ; les surfaces qui deviennent inutiles sont supprimées.</p>` : ''}
     <h4>Liaisons (${ls.length})</h4>
     <div>${ls.map(l => `<button data-goto="${l.id}" style="margin:2px">${esc(liaisonLabel(l))}</button>`).join('') || '<span class="muted">aucune</span>'}</div>
     ${s.free ? '<p class="muted">Surface libre : bulle isolée, conservée même sans liaison ni CF. Choisissez-la comme « surface existante » dans une liaison ou une CF pour la relier ; supprimer cette liaison supprime alors les deux surfaces si elles ne sont plus reliées à rien.</p>' : ''}
-    <div class="btns">${s.name ? '<button data-pa="nameauto" title="Effacer le nom libre et revenir au nom automatique">↺ Nom automatique</button>' : ''}<button data-pa="del" class="danger" title="Supprime aussi les liens et les cycles qui dépendent de cette surface">🗑 Supprimer ${cf ? '(avec sa CF)' : s.free && !ls.length ? 'la surface libre' : '(avec ses liaisons)'}</button></div>`;
+    <div class="btns">${s.name ? '<button data-pa="nameauto" title="Effacer le nom libre et revenir au nom automatique">↺ Nom automatique</button>' : ''}<button data-pa="del" class="danger" title="Supprime aussi les liens et les cycles qui dépendent de cette surface">🗑 Supprimer ${cfs.length ? (cfs.length > 1 ? `(avec ses ${cfs.length} CF)` : '(avec sa CF)') : s.free && !ls.length ? 'la surface libre' : '(avec ses liaisons)'}</button></div>`;
 }
 function linkPanel(l) {
   const sa = SF(l.a), sb = SF(l.b), pa = P(sa.pieceId), pb = P(sb.pieceId), t = ltype(l.type);
@@ -206,7 +206,10 @@ function applyField(target, inp) {
   }
   if (kd === 'surface' && k === 'idx') v = Math.max(1, Math.round(v));
   if (kd === 'liaison' && k === 'point') { target.details = Object.assign({}, target.details, { point: v.trim() }); return true; }
-  if (kd === 'surface' && k === 'auto') { target.pinned = !v; return true; }
+  if (kd === 'surface' && k === 'auto') {
+    if (hostMap.has(target.pieceId)) target.cpinned = !v; else target.pinned = !v;
+    return true;
+  }
   if (kd === 'liaison' && k === 'count') v = Math.max(1, Math.round(v));
   if (kd === 'group' && k === 'count') v = Math.max(2, Math.round(v));
   target[k] = v;

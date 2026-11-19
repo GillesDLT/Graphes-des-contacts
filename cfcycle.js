@@ -7,7 +7,8 @@ const DEFAULT_CYCLE_COLOR = '#e87900';
 const cycleName = c => 'cycle ' + c.num;
 const nextCFNum = (s = S()) => Math.max(0, ...s.cfgs.map(c => c.num || 0)) + 1;
 const nextCycleNum = (s = S()) => Math.max(0, ...s.cycles.map(c => c.num || 0)) + 1;
-const cfOfSurface = (id, s = S()) => s.cfgs.find(c => c.a === id || c.b === id);
+const cfOfSurfaceList = (id, s = S()) => s.cfgs.filter(c => c.a === id || c.b === id);
+const cfOfSurface = (id, s = S()) => cfOfSurfaceList(id, s)[0];
 function setCFColor(c, color) {
   const previous = c.color; c.color = color;
   for (const id of [c.a, c.b]) { const s = SF(id); if (s && s.stroke === previous) s.stroke = color; }
@@ -52,8 +53,6 @@ function migrateCFs(s) {
     if (c.dedicated) {
       const a = s.surfaces.find(f => f.id === c.a), b = s.surfaces.find(f => f.id === c.b);
       if (!a || !b || a.pieceId === b.pieceId) throw new Error('Une CF doit avoir deux surfaces sur deux pièces différentes.');
-      if (s.cfgs.some(f => f.id !== c.id && [f.a, f.b].some(id => id === c.a || id === c.b)))
-        throw new Error('Une surface de CF ne peut pas être partagée avec une autre CF.');
     }
     if (c.name != null && typeof c.name !== 'string') throw new Error('Le nom de la CF doit être un texte.');
     const inferred = Number(String(c.name || '').match(/\d+/)?.[0]);
@@ -125,8 +124,11 @@ function cfDialog(pidA, pidB, editId) {
   };
   const surfOptions = (p, val) => {
     const news = doc.settings.surfaceTypes.map(t => `<option value="new:${esc(t.code)}" ${val === 'new:' + t.code ? 'selected' : ''}>${esc(t.code)} — ${esc(t.label)}</option>`).join('');
-    const ex = S().surfaces.filter(s => s.pieceId === p.id && (!cfOfSurface(s.id) || cfOfSurface(s.id).id === c?.id))
-      .map(s => `<option value="ex:${s.id}" ${val === 'ex:' + s.id ? 'selected' : ''}>${esc(sname(s))}</option>`).join('');
+    const ex = S().surfaces.filter(s => s.pieceId === p.id)
+      .map(s => {
+        const others = cfOfSurfaceList(s.id).filter(f => f.id !== c?.id).map(f => cfDisplayName(f));
+        return `<option value="ex:${s.id}" ${val === 'ex:' + s.id ? 'selected' : ''}>${esc(sname(s))}${others.length ? ' — ' + esc(others.join(', ')) : ''}</option>`;
+      }).join('');
     return `<optgroup label="Nouvelle surface">${news}</optgroup>${ex ? `<optgroup label="Surfaces existantes">${ex}</optgroup>` : ''}`;
   };
   const pieceBox = (p, id) => { const d = $(id, body); d.style.background = p.color; d.style.color = textOn(p.color); d.innerHTML = esc(p.name).replace(/\n/g, '<br>'); };
@@ -145,7 +147,7 @@ function cfDialog(pidA, pidB, editId) {
       </div>
     </div>
     <label><input id="cfLabelBox" type="checkbox" ${c?.labelBox ? 'checked' : ''}> Encadrer le libellé sur le trait</label>
-    <p class="muted">Deux surfaces entre les deux pièces : surfaces existantes ou nouvelles. Le nom est libre et unique dans la feuille, y compris le nom vide (une seule CF sans nom). Point et normale sont affichés avec le détail des liaisons.</p>
+    <p class="muted">Deux surfaces entre les deux pièces : surfaces existantes ou nouvelles. Une surface existante peut servir à plusieurs CF ; son nom affiche alors les autres CF déjà reliées. Le nom est libre et unique dans la feuille, y compris le nom vide (une seule CF sans nom). Point et normale sont affichés avec le détail des liaisons.</p>
     <div class="err" id="cfErr"></div></div>`);
   pieceBox(A, '#cfA'); pieceBox(B, '#cfB');
   $('#cfChipA', body).style.background = A.color; $('#cfChipA', body).style.color = textOn(A.color); $('#cfChipA', body).innerHTML = esc(A.name).replace(/\n/g, '<br>');
@@ -327,6 +329,15 @@ function cycleInternalConnections(c, s = S()) {
   }
   return [...result.values()];
 }
+/* Liaison directe du cycle : utilisée quand l'utilisateur enchaîne deux surfaces
+   qu'aucune liaison ne relie. Elle est tracée en courbe et se déforme au glisser. */
+function freeCycleEdge(from, to, s = S()) {
+  if (!from || !to || from === to) return null;
+  const a = nodeSurfaces(from, s).find(f => surfVisible(f)) || nodeSurfaces(from, s)[0];
+  const b = nodeSurfaces(to, s).find(f => surfVisible(f)) || nodeSurfaces(to, s)[0];
+  if (!a || !b || a.id === b.id) return null;
+  return { kind: 'free', from, to, sa: a.id, sb: b.id, bend: null };
+}
 function cycleError(c, s = S()) {
   if (!c || typeof c !== 'object') return 'Cycle invalide.';
   if (c.num != null) { const err = numberError(c.num, s.cycles, c.id); if (err) return err; }
@@ -339,15 +350,20 @@ function cycleError(c, s = S()) {
   for (let i = 0; i < c.nodes.length; i++) {
     const id = c.nodes[i], surfaces = nodeSurfaces(id, s);
     if (!surfaces.length) return 'Une surface ou une référence du cycle a été supprimée.';
-    if (i > 0 && i < c.nodes.length - 1 && surfaces.some(f => cfOfSurface(f.id, s))) return 'Un cycle contient exactement une CF, à ses extrémités.';
+    if (i > 0 && i < c.nodes.length - 1 && surfaces.some(f => f.id === cf.a || f.id === cf.b)) return 'Un cycle contient exactement une CF, à ses extrémités.';
   }
   for (let i = 0; i < c.edges.length; i++) {
     const e = c.edges[i];
-    if (!e || e.from !== c.nodes[i] || e.to !== c.nodes[i + 1] ||
-      !cycleEdges(c.nodes[i], c.nodes[i + 1], s).some(q => q.kind === e.kind && q.sa === e.sa && q.sb === e.sb && q.linkId === e.linkId))
+    if (!e || e.from !== c.nodes[i] || e.to !== c.nodes[i + 1]) return 'Une liaison ou une référence du parcours a changé.';
+    if (e.kind === 'free') {
+      /* Trait direct : seules les deux surfaces doivent encore exister. */
+      if (!s.surfaces.some(f => f.id === e.sa) || !s.surfaces.some(f => f.id === e.sb)) return 'Une surface du parcours a été supprimée.';
+      continue;
+    }
+    if (!cycleEdges(c.nodes[i], c.nodes[i + 1], s).some(q => q.kind === e.kind && q.sa === e.sa && q.sb === e.sb && q.linkId === e.linkId))
       return 'Une liaison ou une référence du parcours a changé.';
   }
-  return c.edges.some(e => e.kind === 'contact') ? '' : 'Le cycle doit traverser au moins une liaison de contact.';
+  return '';
 }
 function cleanupCycles(s = S()) {
   const before = s.cycles.length;
@@ -367,10 +383,17 @@ function cycleDraftComplete() {
 function pickCycleNode(id, ctrl = false) {
   if (ctrl && cycleDraft?.nodes[cycleDraft.nodes.length - 1] === id) return cycleAction('back');
   if (!cycleDraft) {
-    const cf = cfOfSurface(id);
-    if (!cf) return toast('Commencez par une surface de CF.');
-    cycleDraft = { cfId: cf.id, nodes: [id], edges: [] };
-    render(); renderProps(); updateTip(); return;
+    const cfs = cfOfSurfaceList(id);
+    if (!cfs.length) return toast('Commencez par une surface de CF.');
+    const start = cf => { cycleDraft = { cfId: cf.id, nodes: [id], edges: [] }; render(); renderProps(); updateTip(); };
+    if (cfs.length === 1) return start(cfs[0]);
+    const body = el(`<div><p>Cette surface appartient à plusieurs CF. Le cycle porte sur une seule d'entre elles :</p>
+      <select id="cycleCF" style="width:100%">${cfs.map(cf => `<option value="${cf.id}">${esc(cfDisplayName(cf))} — ${esc(endName(cf.a))} ⟷ ${esc(endName(cf.b))}</option>`).join('')}</select></div>`);
+    openModal({ title: 'Choisir la CF du cycle', body, okText: 'Commencer', onOk: () => {
+      const cf = cfs.find(x => x.id === $('#cycleCF', body).value);
+      closeModal(); if (cf) start(cf); return false;
+    } });
+    return;
   }
   if (cycleDraftComplete()) return saveCycleDialog();
   const cf = C(cycleDraft.cfId);
@@ -379,12 +402,23 @@ function pickCycleNode(id, ctrl = false) {
   if (cycleDraft.nodes.includes(id)) return toast('Ce nœud est déjà dans le cycle. Utilisez « Retirer la dernière étape ».');
   const surfaces = nodeSurfaces(id);
   if (!surfaces.length) return toast('Choisissez une surface ou un groupe de références.');
-  if (id !== other && surfaces.some(f => cfOfSurface(f.id))) return toast('Une seule CF par cycle : terminez sur son autre surface.');
-  const from = cycleDraft.nodes[cycleDraft.nodes.length - 1], edges = cycleEdges(from, id);
-  if (!edges.length) return toast('Étape impossible : restez dans la même pièce ou traversez une liaison de contact existante.');
+  if (id !== other && surfaces.some(f => f.id === cf.a || f.id === cf.b)) return toast('Une seule CF par cycle : terminez sur son autre surface.');
+  const from = cycleDraft.nodes[cycleDraft.nodes.length - 1];
+  let edges = cycleEdges(from, id), warning = '';
+  if (!edges.length) {
+    /* Aucune liaison entre les deux nœuds : on ne bloque plus, on prévient. */
+    const free = freeCycleEdge(from, id);
+    if (!free) return toast('Choisissez une autre surface : ce nœud touche déjà l’étape précédente.');
+    const fa = SF(free.sa), fb = SF(free.sb);
+    warning = fa && fb && fa.pieceId === fb.pieceId
+      ? `Attention : aucune liaison de contact ne relie ${sname(fa)} et ${sname(fb)} dans cette pièce — le cycle trace un trait direct. Vérifiez que c’est bien voulu.`
+      : `Attention : aucune liaison ne relie ${sname(fa)} et ${sname(fb)} — le cycle trace un trait direct entre les deux surfaces. Vérifiez que c’est bien voulu.`;
+    edges = [free];
+  }
   const append = edge => {
     cycleDraft.nodes.push(id); cycleDraft.edges.push(edge);
     render(); renderProps(); updateTip();
+    if (warning) toast(warning);
     if (id === other) saveCycleDialog();
   };
   if (edges.length === 1 || edges.every(e => e.kind === edges[0].kind)) return append(edges[0]);

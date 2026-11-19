@@ -31,7 +31,8 @@ function liaisonDialog(pidA, pidB, editId) {
   const pieceBox = (p, id) => { const d = $(id, body); d.style.background = p.color; d.style.color = textOn(p.color); d.innerHTML = esc(p.name).replace(/\n/g, '<br>'); };
   const surfOptions = (p, val) => {
     const news = doc.settings.surfaceTypes.map(t => `<option value="new:${esc(t.code)}" ${val === 'new:' + t.code ? 'selected' : ''}>${esc(t.code)} — ${esc(t.label)}</option>`).join('');
-    const ex = S().surfaces.filter(s => s.pieceId === p.id && !cfOfSurface(s.id)).map(s => `<option value="ex:${s.id}" ${val === 'ex:' + s.id ? 'selected' : ''}>${esc(sname(s))}</option>`).join('');
+    const ex = S().surfaces.filter(s => s.pieceId === p.id)
+      .map(s => { const cfs = cfOfSurfaceList(s.id).map(c => cfDisplayName(c)); return `<option value="ex:${s.id}" ${val === 'ex:' + s.id ? 'selected' : ''}>${esc(sname(s))}${cfs.length ? ' — ' + esc(cfs.join(', ')) : ''}</option>`; }).join('');
     return `<optgroup label="Nouvelle surface">${news}</optgroup>${ex ? `<optgroup label="Surfaces existantes">${ex}</optgroup>` : ''}`;
   };
   // Noms prévisionnels des surfaces (nouvelles surfaces numérotées dans l'ordre des cartes)

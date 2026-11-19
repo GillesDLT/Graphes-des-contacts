@@ -202,8 +202,10 @@ fonctionnels permettent de les réduire ou de les développer.
    graphe avec le détail des liaisons.
 5. Valider.
 
-Une surface existante peut être partagée avec une liaison, mais jamais entre
-deux CF. Supprimer une CF supprime ses surfaces devenues inutiles.
+Une surface existante peut être partagée avec une liaison, et avec plusieurs
+CF : `PL.1.1 — CF1 — PL.2.1 — CF2 — PL.3.1` décrit deux CF qui se succèdent sur
+la même surface `PL.2.1`. Son anneau est alors partagé en autant de couleurs que
+de CF. Supprimer une CF supprime ses surfaces devenues inutiles.
 
 Le panneau **CF** liste toutes les conditions fonctionnelles de la feuille.
 Il permet de les afficher en noir ou dans leur couleur, individuellement ou
@@ -236,8 +238,16 @@ Le même outil affiche le nombre de cycles indépendants (nombre cyclomatique) :
 1. Cliquer sur **Cycle**.
 2. Commencer par une surface de la CF étudiée.
 3. Cliquer successivement sur les surfaces ou les groupes de référence du
-   parcours, en suivant les contacts existants.
+   parcours : le cycle suit **l’ordre des clics**.
 4. Terminer sur l’autre surface de **la même CF**, puis valider.
+
+Le cycle est permissif : lorsque deux surfaces successives sont reliées par une
+liaison, le cycle reprend le trait de cette liaison ; sinon il trace un **trait
+direct** et un message d’avertissement le signale, sans rien bloquer.
+
+Les traits courbes du cycle (traits directs et courbes internes aux pièces)
+peuvent être **glissés à la souris** pour les écarter ou les rendre plus lisibles,
+comme la courbure d’une liaison. Le réglage est conservé à l’enregistrement.
 
 Le cycle contient exactement une CF. Les contacts, surfaces et références
 utilisent la couleur du cycle, avec des courbes pointillées pour les connexions

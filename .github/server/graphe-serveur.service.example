@@ -1,0 +1,25 @@
+[Unit]
+Description=Graphe des contacts — serveur de partage en direct
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=graphe
+Group=graphe
+WorkingDirectory=/opt/graphe-des-contacts/server
+Environment=NODE_ENV=production
+Environment=PORT=8787
+Environment=HOST=0.0.0.0
+Environment=DATA_DIR=/var/lib/graphe-des-contacts
+ExecStart=/usr/bin/node /opt/graphe-des-contacts/server/graph-server.js
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/graphe-des-contacts
+
+[Install]
+WantedBy=multi-user.target

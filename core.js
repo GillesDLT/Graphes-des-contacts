@@ -398,7 +398,9 @@ function autoLayout(iter = 4) {
       const items = surfs.map(s => {
         if (s[kA] == null) s[kA] = s.ang;
         let t = s[kA], w = 0.3;
-        const pinned = s.pinned && !grp;
+        /* En mode compact, l'épinglage est propre au groupe (cpinned) : le
+           placement en mode développé (pinned/ang) n'est pas modifié. */
+        const pinned = grp ? !!s.cpinned : s.pinned;
         const ps = !pinned && (partners.get(s.id) || []).filter(q => { const o = SF(q); return o && hostIdOf(o.pieceId) !== p.id; });
         if (pinned) w = 1000;
         else if (ps && ps.length) {

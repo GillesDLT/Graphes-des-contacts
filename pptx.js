@@ -100,9 +100,9 @@ function makePptxBlob() {
   });
   // Surfaces / bulles de CF : formes rondes natives avec texte PowerPoint éditable.
   for (const s of sheet.surfaces.filter(surfVisible)) {
-    const c = spos(s); const cf = cfOfSurface(s.id);
-    const color = cf?.inColor === false ? '#000000' : (cycleMarks.surfaces.has(s.id) && !cycleMarks.covered.has(s.id) ? (cycleMarks.colors.surfaces.get(s.id) || s.stroke) : s.stroke);
-    const textColor = cf?.inColor === false ? '#000000' : (lum(s.color) < 0.2 ? '#ffffff' : '#1f3b70');
+    const c = spos(s); const blackCF = cfOfSurfaceList(s.id).some(f => f.inColor === false);
+    const color = blackCF ? '#000000' : (cycleMarks.surfaces.has(s.id) && !cycleMarks.covered.has(s.id) ? (cycleMarks.colors.surfaces.get(s.id) || s.stroke) : s.stroke);
+    const textColor = blackCF ? '#000000' : (lum(s.color) < 0.2 ? '#ffffff' : '#1f3b70');
     const lines = s.count > 1 ? [`${s.count}x`, sname(s)] : [sname(s)];
     const bubble = captureShapes(() => addShape({ name: `Surface ${sname(s)}`, x: X(c.x - s.r), y: Y(c.y - s.r), w: D(s.r * 2), h: D(s.r * 2), geom: 'ellipse', fill: s.color, line: color || '#1a1a1a', lineWidth: 1.6, text: lines, textColor, fontSize: 10 }));
     if (pieceChildren.has(s.pieceId)) pieceChildren.set(s.pieceId, pieceChildren.get(s.pieceId) + bubble);
