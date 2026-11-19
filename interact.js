@@ -301,11 +301,13 @@ svg.addEventListener('pointerdown', e => {
     return;
   }
   if (tool === 'cfg') {
-    /* Chaque extrémité peut être une pièce (nouvelle surface) ou une surface existante. */
-    const pidOf = id => { const f = SF(id); return f ? f.pieceId : id; };
-    if (!h || !['piece', 'surface', 'nominal'].includes(h.kind)) return toast('Choisissez deux pièces ou deux surfaces, sur deux pièces différentes. Développez les groupes fonctionnels si nécessaire.');
-    const id = h.kind === 'surface' ? h.id : pieceOfHit(h);
-    if (!id) return toast('Choisissez une pièce ou une surface pour cette extrémité.');
+    /* Chaque extrémité peut être une pièce (nouvelle surface), une surface
+       existante ou un groupe de référence (référence ISO). */
+    const pidOf = id => endPiece(id);
+    const isRefGroup = h && h.kind === 'group' && G(h.id)?.kind === 'ref';
+    if (!h || !(isRefGroup || ['piece', 'surface', 'nominal'].includes(h.kind))) return toast('Choisissez deux pièces, deux surfaces ou deux groupes de référence, sur deux pièces différentes. Développez les groupes fonctionnels si nécessaire.');
+    const id = (h.kind === 'surface' || isRefGroup) ? h.id : pieceOfHit(h);
+    if (!id) return toast('Choisissez une pièce, une surface ou un groupe de référence pour cette extrémité.');
     if (pick.length === 1) {
       const other = pick[0];
       if (other === id) return toast('Choisissez une extrémité différente pour la CF.');
@@ -314,7 +316,8 @@ svg.addEventListener('pointerdown', e => {
     pick.push(id);
     if (pick.length === 2) {
       const [ra, rb] = pick; pick = []; setTool('select');
-      cfDialog(pidOf(ra), pidOf(rb), null, { a: SF(ra) ? ra : null, b: SF(rb) ? rb : null });
+      const endRef = id => (SF(id) || refGroupOf(id)) ? id : null;
+      cfDialog(pidOf(ra), pidOf(rb), null, { a: endRef(ra), b: endRef(rb) });
     } else { render(); renderProps(); }
     updateTip(); return;
   }
@@ -585,7 +588,7 @@ function onDouble(h, pt, e) {
   if (h.kind === 'piece') { setTool('liaison'); pick = [h.id]; render(); updateTip(); return; }
   if (h.kind === 'liaison' || h.kind === 'llabel') { const l = L(h.id); return liaisonDialog(SF(l.a).pieceId, SF(l.b).pieceId, l.id); }
   if (h.kind === 'torseur') { const l = L(h.id); return l ? liaisonDialog(SF(l.a).pieceId, SF(l.b).pieceId, l.id) : null; }
-  if (h.kind === 'cfg') { const c = C(h.id); return cfDialog(SF(c.a).pieceId, SF(c.b).pieceId, c.id); }
+  if (h.kind === 'cfg') { const c = C(h.id); return cfDialog(endPiece(c.a), endPiece(c.b), c.id); }
   if (h.kind === 'surface') return surfaceNameDialog(h.id);
   if (h.kind === 'group' || h.kind === 'cfg' || h.kind === 'surface') { const i = $('#props [data-k=name]'); if (i) { i.focus(); i.select(); } }
 }

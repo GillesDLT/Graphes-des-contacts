@@ -65,9 +65,31 @@ function surfSVG(s) {
   return `<g data-id="${s.id}" data-kind="surface"><title>${title}</title><circle cx="${r1(c.x)}" cy="${r1(c.y)}" r="${s.r}" fill="${s.color}" stroke="${stroke}" stroke-width="${SURF_SW}"${marked ? ' stroke-dasharray="6 4"' : ''}/>${ring}` +
     `<text x="${r1(c.x)}" y="${r1(c.y + (s.count > 1 ? -3 : SURF_FONT * 0.35))}" text-anchor="middle" font-size="${SURF_FONT}" fill="${tc}">${s.count > 1 ? `<tspan x="${r1(c.x)}">${s.count}x</tspan><tspan x="${r1(c.x)}" dy="15">${esc(name)}</tspan>` : esc(name)}</text></g>`;
 }
+/* Point d'accroche d'une extrémité de lien : centre + rayon d'une surface, ou
+   point du contour d'un groupe de référence le plus proche de l'autre extrémité. */
+function groupOutlinePoint(g, toward) {
+  let best = null, distance = Infinity;
+  for (const loop of groupShape(g).loops) for (let i = 0; i < loop.length; i++) {
+    const a = loop[i], b = loop[(i + 1) % loop.length], dx = b[0] - a[0], dy = b[1] - a[1];
+    const t = clampN(((toward.x - a[0]) * dx + (toward.y - a[1]) * dy) / (dx * dx + dy * dy || 1), 0, 1);
+    const x = a[0] + dx * t, y = a[1] + dy * t, d = Math.hypot(x - toward.x, y - toward.y);
+    if (d < distance) { distance = d; best = { x, y }; }
+  }
+  return best;
+}
+function endAnchor(id, toward) {
+  const s = SF(id);
+  if (s) { const c = spos(s); return { x: c.x, y: c.y, r: s.r }; }
+  const g = refGroupOf(id);
+  if (g) {
+    const c = membersCenter(g), p = (toward && groupOutlinePoint(g, toward)) || c;
+    return { x: p.x, y: p.y, r: 0 };
+  }
+  return null;
+}
 function linkGeom(l) {
-  const sa = SF(l.a), sb = SF(l.b); if (!sa || !sb) return null;
-  const a = spos(sa), b = spos(sb);
+  const A = endAnchor(l.a, endPos(l.b)), B = endAnchor(l.b, endPos(l.a)); if (!A || !B) return null;
+  const a = { x: A.x, y: A.y }, b = { x: B.x, y: B.y };
   const d = Math.hypot(b.x - a.x, b.y - a.y) || 1, ux = (b.x - a.x) / d, uy = (b.y - a.y) / d;
   const cx = (a.x + b.x) / 2 - uy * (l.curved ? l.bend || 0 : 0), cy = (a.y + b.y) / 2 + ux * (l.curved ? l.bend || 0 : 0);
   const point = t => ({ x: (1 - t) ** 2 * a.x + 2 * (1 - t) * t * cx + t * t * b.x, y: (1 - t) ** 2 * a.y + 2 * (1 - t) * t * cy + t * t * b.y });
@@ -84,8 +106,8 @@ function linkGeom(l) {
     }
     return (inside + outside) / 2;
   };
-  const t0 = l.curved ? boundary(a, sa.r, 0, 1) : Math.min(1, sa.r / d);
-  const t1 = l.curved ? boundary(b, sb.r, 1, 0) : Math.max(0, 1 - sb.r / d);
+  const t0 = l.curved ? boundary(a, A.r, 0, 1) : Math.min(1, A.r / d);
+  const t1 = l.curved ? boundary(b, B.r, 1, 0) : Math.max(0, 1 - B.r / d);
   const p1 = point(t0), p2 = point(t1);
   return { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, ax: a.x, ay: a.y, bx: b.x, by: b.y, cx, cy, t0, t1, point, curved: !!l.curved };
 }
@@ -407,9 +429,10 @@ function renderOverlay() {
     if (sh.loops.length) o += `<path d="${shapePath(sh)}" fill="${tool === 'ref' ? 'none' : doc.settings.groupColors[tool]}" fill-opacity="0.45" stroke="${tool === 'ref' ? doc.settings.groupColors.ref : '#6b7280'}" stroke-width="${2 / k}" stroke-dasharray="${6 / k} ${4 / k}" pointer-events="none"/>`;
   }
   for (const id of pick) {
-    const p = P(id), s = SF(id);
+    const p = P(id), s = SF(id), g = G(id);
     if (p) o += `<ellipse cx="${p.x}" cy="${p.y}" rx="${p.rx + 5}" ry="${p.ry + 5}" fill="none" stroke="#f59e0b" stroke-width="${4 / k}"/>`;
     if (s) { const c = spos(s); o += `<circle cx="${c.x}" cy="${c.y}" r="${s.r + 5}" fill="none" stroke="#e00000" stroke-width="${3 / k}"/>`; }
+    if (g) o += `<path d="${shapePath(groupShape(g))}" fill="none" stroke="#f59e0b" stroke-width="${3 / k}" stroke-dasharray="${6 / k} ${4 / k}"/>`;
   }
   if (tool === 'rep') for (const id of pickCFs) {
     const cf = C(id); if (!cf) continue;
@@ -468,7 +491,7 @@ const TIPS = {
   rep: '<b>Ctrl + clic</b> sur les pièces répétées ; <b>clic sur une surface de CF</b> pour inclure / retirer sa CF entière — <b>Entrée</b> pour valider',
   fonc: '<b>Ctrl + clic</b> sur les pièces ; <b>clic sur un titre de répétition visible</b> pour l’inclure / le retirer du contour, sans ajouter ses pièces — <b>Entrée</b> pour valider',
   ref: '<b>Ctrl + clic</b> sur les surfaces du système de référence — <b>Entrée</b> pour valider',
-  cfg: '<b>Clic</b> sur 2 pièces ou sur 2 surfaces (une par pièce) pour créer une CF avec un nom libre unique ; une extrémité peut aussi être une surface existante choisie directement sur le graphe',
+  cfg: '<b>Clic</b> sur 2 pièces, 2 surfaces ou 2 groupes de référence (une extrémité par pièce) pour créer une CF avec un nom libre unique ; le trait s’accroche au contour d’un groupe de référence',
   cycle: '<b>Clic ou Ctrl+clic</b> sur une surface de CF, puis les surfaces ou références dans l’ordre voulu — finir sur l’autre surface de la même CF. Sans liaison, un trait direct est tracé avec un avertissement. Les traits courbes se glissent pour les courber. <b>Ctrl+clic sur la dernière étape</b> : retirer',
   pipette: '<b>Clic</b> sur un élément pour prélever sa couleur',
   paint: '<b>Clic</b> sur un élément pour lui appliquer la couleur courante',
@@ -482,7 +505,7 @@ function updateTip() {
   if (tool === 'spec' && editSpecId) return showTip('<b>Composants liés</b> : clic sur une surface ou un groupe de la même pièce pour l’ajouter / le retirer — <b>Entrée</b> pour terminer');
   if (tool === 'spec' && pick.length) return showTip(`<b>${pick.length} composant(s) sélectionné(s)</b> — tous doivent appartenir à la même pièce — <b>Entrée</b> pour créer la spécification`);
   if (tool === 'liaison' && pick.length === 1) return showTip(`1<sup>re</sup> pièce : <b>${esc(P(pick[0])?.name)}</b> — <b>Ctrl + clic</b> sur la 2<sup>e</sup> pièce`);
-  if (tool === 'cfg' && pick.length === 1) return showTip(`1<sup>re</sup> extrémité : <b>${esc(endName(pick[0]))}</b> — clic sur une pièce ou une surface d'une autre pièce`);
+  if (tool === 'cfg' && pick.length === 1) return showTip(`1<sup>re</sup> extrémité : <b>${esc(endName(pick[0]))}</b> — clic sur une pièce, une surface ou un groupe de référence d'une autre pièce`);
   if (tool === 'cycle' && cycleDraft) return showTip(`<b>${esc(cfDisplayName(C(cycleDraft.cfId)))}</b> : ${cycleDraft.nodes.length} nœud(s) — <b>Clic ou Ctrl+clic</b> sur une surface ou une référence (sans liaison : trait direct) — <b>Ctrl+clic sur la dernière étape</b> ou <b>Retour arrière</b> : retirer`);
   showTip(TIPS[tool]);
 }

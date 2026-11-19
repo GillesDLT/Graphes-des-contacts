@@ -295,7 +295,7 @@ function propAction(a, t, btn) {
     case 'cnt-1': case 'cnt+1': checkpoint(); t.count = Math.max(2, t.count + (a === 'cnt+1' ? 1 : -1)); changed(); break;
     case 'front': { checkpoint(); const gs = S().groups; gs.splice(gs.indexOf(t), 1); gs.unshift(t); changed(); break; }
     case 'back': { checkpoint(); const gs = S().groups; gs.splice(gs.indexOf(t), 1); gs.push(t); changed(); break; }
-    case 'editcf': cfDialog(SF(t.a).pieceId, SF(t.b).pieceId, t.id); break;
+    case 'editcf': cfDialog(endPiece(t.a), endPiece(t.b), t.id); break;
     case 'loopcalc': closedLoopsDialog(); break;
     case 'cycles': setTool('cycle'); break;
     case 'cfs': setTool('cfg'); break;

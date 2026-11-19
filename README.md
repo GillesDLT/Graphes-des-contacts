@@ -210,6 +210,11 @@ CF : `PL.1.1 — CF1 — PL.2.1 — CF2 — PL.3.1` décrit deux CF qui se succ�
 la même surface `PL.2.1`. Son anneau est alors partagé en autant de couleurs que
 de CF. Supprimer une CF supprime ses surfaces devenues inutiles.
 
+Une extrémité de CF peut aussi être un **groupe de référence** (référence ISO) :
+le trait s’accroche alors au contour du groupe, du côté de l’autre extrémité.
+Cliquer sur le groupe avec l’outil **CF**, ou le choisir dans la liste
+« Groupes de référence » de la fenêtre.
+
 Le panneau **CF** liste toutes les conditions fonctionnelles de la feuille.
 Il permet de les afficher en noir ou dans leur couleur, individuellement ou
 toutes ensemble, sans effacer leur couleur enregistrée.
