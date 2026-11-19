@@ -94,7 +94,7 @@ function surfPanel(s) {
     ${fRow('Nom libre', fText('name', s.name, `${s.type}.${p.num}.${s.idx} (auto)`))}
     ${fRow('Couleur', fColor('color'))}
     ${fRow('Contour', fColor('stroke'))}
-    ${fRow('Placement', fCheck('auto', !s.pinned, 'Automatique (suit les liaisons)'))}
+    ${fRow('Placement', fCheck('auto', !(hostMap.has(s.pieceId) ? s.cpinned : s.pinned), hostMap.has(s.pieceId) ? 'Automatique sur le groupe réduit (suit les liaisons)' : 'Automatique (suit les liaisons)'))}
     ${cfs.length ? `<h4>${cfs.length > 1 ? 'Surfaces de CF partagée' : 'Surface de ' + esc(cfDisplayName(cf))}</h4><div class="btns">${cfs.map(c => `<button data-goto="${c.id}">Modifier ${esc(cfDisplayName(c))}</button>`).join('')}</div><p class="muted">Supprimer cette surface supprime ses liaisons et ${cfs.length > 1 ? 'ses ' + cfs.length + ' CF' : 'sa CF'}, ainsi que les cycles associés ; les surfaces qui deviennent inutiles sont supprimées.</p>` : ''}
     <h4>Liaisons (${ls.length})</h4>
     <div>${ls.map(l => `<button data-goto="${l.id}" style="margin:2px">${esc(liaisonLabel(l))}</button>`).join('') || '<span class="muted">aucune</span>'}</div>
@@ -206,7 +206,10 @@ function applyField(target, inp) {
   }
   if (kd === 'surface' && k === 'idx') v = Math.max(1, Math.round(v));
   if (kd === 'liaison' && k === 'point') { target.details = Object.assign({}, target.details, { point: v.trim() }); return true; }
-  if (kd === 'surface' && k === 'auto') { target.pinned = !v; return true; }
+  if (kd === 'surface' && k === 'auto') {
+    if (hostMap.has(target.pieceId)) target.cpinned = !v; else target.pinned = !v;
+    return true;
+  }
   if (kd === 'liaison' && k === 'count') v = Math.max(1, Math.round(v));
   if (kd === 'group' && k === 'count') v = Math.max(2, Math.round(v));
   target[k] = v;

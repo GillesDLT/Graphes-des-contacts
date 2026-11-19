@@ -73,7 +73,7 @@ function migrateCFs(s) {
         const other = s.surfaces.find(f => f.id === c[side === 'a' ? 'b' : 'a']);
         const q = s.pieces.find(p => p.id === (other ? other.pieceId : c[side === 'a' ? 'b' : 'a']));
         const f = { id: uid(), pieceId: p.id, type: old ? old.type : 'PL', idx, dx: 0, dy: 0, r: 24,
-          color: '#ffffff', stroke: c.color || '#b42318', sw: 2, name: '', pinned: false,
+          color: '#ffffff', stroke: c.color || '#b42318', sw: SURF_SW, name: '', pinned: false,
           ang: old ? old.ang : Math.atan2((q ? q.y : p.y) - p.y, (q ? q.x : p.x + 1) - p.x) };
         s.surfaces.push(f); c[side] = f.id;
       }
@@ -99,7 +99,7 @@ function createCF(aId, bId, name = nextCFName(), details = {}) {
   if (err) throw new Error(err);
   const c = { id: uid(), a: aId, b: bId, num: nextCFNum(), name, color: '#b42318', inColor: true, dedicated: true, labelBox: false,
     details: { point: String(details.point || '').trim(), normale: String(details.normale || '').trim() } };
-  [sa, sb].forEach(s => { s.stroke = c.color; s.sw = 2; });
+  [sa, sb].forEach(s => { s.stroke = c.color; });
   S().cfgs.push(c);
   return c;
 }
@@ -111,15 +111,19 @@ function cfDetailText(c) {
   return parts.join(' ');
 }
 
-function cfDialog(pidA, pidB, editId) {
+function cfDialog(pidA, pidB, editId, pre = {}) {
   const c = editId ? C(editId) : null, A = P(pidA), B = P(pidB);
   if (!A || !B || A.id === B.id) return toast('Choisissez deux pièces différentes pour la CF.');
   const sa = c && SF(c.a), sb = c && SF(c.b);
+  /* Surfaces déjà choisies en cliquant dessus sur le graphe (clic sur une surface). */
+  const preA = !c && pre.a && SF(pre.a) && SF(pre.a).pieceId === A.id ? SF(pre.a) : null;
+  const preB = !c && pre.b && SF(pre.b) && SF(pre.b).pieceId === B.id ? SF(pre.b) : null;
+  const exA = sa || preA, exB = sb || preB;
   const det = Object.assign({ point: '', normale: '' }, c && c.details ? clone(c.details) : {});
   const normMode = ['x', 'y', 'z'].includes(det.normale) ? det.normale : det.normale ? 'custom' : 'none';
   const state = {
-    sa: sa ? 'ex:' + sa.id : 'new:PL', sb: sb ? 'ex:' + sb.id : 'new:PL',
-    countA: sa ? sa.count || 1 : 1, countB: sb ? sb.count || 1 : 1,
+    sa: exA ? 'ex:' + exA.id : 'new:PL', sb: exB ? 'ex:' + exB.id : 'new:PL',
+    countA: exA ? exA.count || 1 : 1, countB: exB ? exB.count || 1 : 1,
     nameA: '', nameB: ''
   };
   const surfOptions = (p, val) => {
@@ -211,8 +215,8 @@ function cfDialog(pidA, pidB, editId) {
 }
 function cfListPanel() {
   const cs = S().cfgs;
-  return `<h3>CF</h3><p class="muted">Cliquer sur deux pièces pour créer une CF. Les modes noir / couleur ne changent pas sa couleur enregistrée.</p>
-    ${pick.length === 1 && P(pick[0]) ? `<p>Première pièce : <b>${esc(P(pick[0]).name)}</b>. Choisir la deuxième pièce.</p>` : ''}
+  return `<h3>CF</h3><p class="muted">Cliquer sur deux pièces, ou directement sur deux surfaces (une par pièce), pour créer une CF : chaque extrémité est alors la surface cliquée ou une nouvelle surface. Les modes noir / couleur ne changent pas sa couleur enregistrée.</p>
+    ${pick.length === 1 && (SF(pick[0]) || P(pick[0])) ? `<p>Première extrémité : <b>${esc(endName(pick[0]))}</b>. Choisir la deuxième sur une autre pièce.</p>` : ''}
     <h4>CF existantes (${cs.length})</h4>
     <div class="btns"><button data-cfa="blackall" ${cs.length ? '' : 'disabled'}>Toutes en noir</button><button data-cfa="colorall" ${cs.length ? '' : 'disabled'}>Toutes en couleur</button></div>
     ${cs.map(c => `<div class="cycle-card" data-cf="${c.id}">

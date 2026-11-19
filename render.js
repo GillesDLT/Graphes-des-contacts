@@ -59,10 +59,10 @@ function surfSVG(s) {
   /* Surface partagée par plusieurs CF en couleur : anneau divisé, une portion par CF. */
   const ring = !blackCF && !marked && cfs.length > 1 ? cfs.map((c, i) => {
     const per = TAU * s.r / cfs.length;
-    return `<circle cx="${r1(c.x)}" cy="${r1(c.y)}" r="${s.r}" fill="none" stroke="${c.color}" stroke-width="${s.sw}" stroke-dasharray="${r1(per)} ${r1(per * (cfs.length - 1))}" stroke-dashoffset="${r1(-per * i)}"/>`;
+    return `<circle cx="${r1(c.x)}" cy="${r1(c.y)}" r="${s.r}" fill="none" stroke="${c.color}" stroke-width="${SURF_SW}" stroke-dasharray="${r1(per)} ${r1(per * (cfs.length - 1))}" stroke-dashoffset="${r1(-per * i)}"/>`;
   }).join('') : '';
   const title = cfs.length ? `Surface de ${esc(cfs.map(c => cfDisplayName(c)).join(' et '))}` : 'Double-clic pour nommer la surface (vide = nom automatique)';
-  return `<g data-id="${s.id}" data-kind="surface"><title>${title}</title><circle cx="${r1(c.x)}" cy="${r1(c.y)}" r="${s.r}" fill="${s.color}" stroke="${stroke}" stroke-width="${marked ? 2.2 : s.sw}"${marked ? ' stroke-dasharray="6 4"' : ''}/>${ring}` +
+  return `<g data-id="${s.id}" data-kind="surface"><title>${title}</title><circle cx="${r1(c.x)}" cy="${r1(c.y)}" r="${s.r}" fill="${s.color}" stroke="${stroke}" stroke-width="${SURF_SW}"${marked ? ' stroke-dasharray="6 4"' : ''}/>${ring}` +
     `<text x="${r1(c.x)}" y="${r1(c.y + (s.count > 1 ? -3 : SURF_FONT * 0.35))}" text-anchor="middle" font-size="${SURF_FONT}" fill="${tc}">${s.count > 1 ? `<tspan x="${r1(c.x)}">${s.count}x</tspan><tspan x="${r1(c.x)}" dy="15">${esc(name)}</tspan>` : esc(name)}</text></g>`;
 }
 function linkGeom(l) {
@@ -468,7 +468,7 @@ const TIPS = {
   rep: '<b>Ctrl + clic</b> sur les pièces répétées ; <b>clic sur une surface de CF</b> pour inclure / retirer sa CF entière — <b>Entrée</b> pour valider',
   fonc: '<b>Ctrl + clic</b> sur les pièces ; <b>clic sur un titre de répétition visible</b> pour l’inclure / le retirer du contour, sans ajouter ses pièces — <b>Entrée</b> pour valider',
   ref: '<b>Ctrl + clic</b> sur les surfaces du système de référence — <b>Entrée</b> pour valider',
-  cfg: '<b>Clic</b> sur 2 pièces pour créer une CF avec un nom libre unique ; chaque extrémité utilise une surface existante ou une nouvelle surface, avec un point et une normale facultatifs',
+  cfg: '<b>Clic</b> sur 2 pièces ou sur 2 surfaces (une par pièce) pour créer une CF avec un nom libre unique ; une extrémité peut aussi être une surface existante choisie directement sur le graphe',
   cycle: '<b>Clic ou Ctrl+clic</b> sur une surface de CF, puis les surfaces ou références dans l’ordre voulu — finir sur l’autre surface de la même CF. Sans liaison, un trait direct est tracé avec un avertissement. Les traits courbes se glissent pour les courber. <b>Ctrl+clic sur la dernière étape</b> : retirer',
   pipette: '<b>Clic</b> sur un élément pour prélever sa couleur',
   paint: '<b>Clic</b> sur un élément pour lui appliquer la couleur courante',
@@ -482,7 +482,7 @@ function updateTip() {
   if (tool === 'spec' && editSpecId) return showTip('<b>Composants liés</b> : clic sur une surface ou un groupe de la même pièce pour l’ajouter / le retirer — <b>Entrée</b> pour terminer');
   if (tool === 'spec' && pick.length) return showTip(`<b>${pick.length} composant(s) sélectionné(s)</b> — tous doivent appartenir à la même pièce — <b>Entrée</b> pour créer la spécification`);
   if (tool === 'liaison' && pick.length === 1) return showTip(`1<sup>re</sup> pièce : <b>${esc(P(pick[0])?.name)}</b> — <b>Ctrl + clic</b> sur la 2<sup>e</sup> pièce`);
-  if (tool === 'cfg' && pick.length === 1) return showTip(`1<sup>re</sup> pièce : <b>${esc(endName(pick[0]))}</b> — clic sur une autre pièce`);
+  if (tool === 'cfg' && pick.length === 1) return showTip(`1<sup>re</sup> extrémité : <b>${esc(endName(pick[0]))}</b> — clic sur une pièce ou une surface d'une autre pièce`);
   if (tool === 'cycle' && cycleDraft) return showTip(`<b>${esc(cfDisplayName(C(cycleDraft.cfId)))}</b> : ${cycleDraft.nodes.length} nœud(s) — <b>Clic ou Ctrl+clic</b> sur une surface ou une référence (sans liaison : trait direct) — <b>Ctrl+clic sur la dernière étape</b> ou <b>Retour arrière</b> : retirer`);
   showTip(TIPS[tool]);
 }

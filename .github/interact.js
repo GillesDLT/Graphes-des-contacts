@@ -166,6 +166,7 @@ function fitView() {
 function hitOf(e) {
   const specBend = e.target.closest('[data-spec-bend]'); if (specBend) return { kind: 'specBend', id: specBend.dataset.specBend, ti: specBend.dataset.ti };
   const bend = e.target.closest('[data-bend-id]'); if (bend) return { kind: 'bend', id: bend.dataset.bendId };
+  const curve = e.target.closest('[data-cycle-bend]'); if (curve) return { kind: 'cycleBend', id: curve.dataset.cycleBend, key: curve.dataset.cycleKey, edge: curve.dataset.cycleEdge };
   const h = e.target.closest('[data-handle]'); if (h) return { kind: 'handle', id: h.dataset.pid, handle: h.dataset.handle };
   const n = e.target.closest('[data-id]'); if (!n) return null;
   return { kind: n.dataset.kind, id: n.dataset.id };
@@ -180,7 +181,7 @@ svg.addEventListener('pointerdown', e => {
   if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
   const pt = toWorld(e), h = hitOf(e);
   if (e.ctrlKey || e.metaKey || e.shiftKey || spaceDown || e.button !== 0) lastDown.t = 0;
-  if (e.button === 0 && tool === 'select' && !spaceDown && !e.ctrlKey && !e.metaKey && !e.shiftKey && !(h && ['gtoggle', 'bend', 'specBend', 'handle'].includes(h.kind))) {
+  if (e.button === 0 && tool === 'select' && !spaceDown && !e.ctrlKey && !e.metaKey && !e.shiftKey && !(h && ['gtoggle', 'bend', 'cycleBend', 'specBend', 'handle'].includes(h.kind))) {
     const key = h ? h.kind + ':' + h.id : 'background';
     const now = performance.now(), isDbl = lastDown.t > 0 && key === lastDown.key && now - lastDown.t < 380 && Math.hypot(e.clientX - lastDown.x, e.clientY - lastDown.y) < 6;
     lastDown = { t: isDbl ? 0 : now, x: e.clientX, y: e.clientY, key };
@@ -300,12 +301,21 @@ svg.addEventListener('pointerdown', e => {
     return;
   }
   if (tool === 'cfg') {
-    const id = pieceOfHit(h);
-    if (!id) return toast('Choisissez deux pièces. Développez les groupes fonctionnels si nécessaire.');
-    if (pick[0] === id) return toast('Choisissez une pièce différente pour la CF.');
+    /* Chaque extrémité peut être une pièce (nouvelle surface) ou une surface existante. */
+    const pidOf = id => { const f = SF(id); return f ? f.pieceId : id; };
+    if (!h || !['piece', 'surface', 'nominal'].includes(h.kind)) return toast('Choisissez deux pièces ou deux surfaces, sur deux pièces différentes. Développez les groupes fonctionnels si nécessaire.');
+    const id = h.kind === 'surface' ? h.id : pieceOfHit(h);
+    if (!id) return toast('Choisissez une pièce ou une surface pour cette extrémité.');
+    if (pick.length === 1) {
+      const other = pick[0];
+      if (other === id) return toast('Choisissez une extrémité différente pour la CF.');
+      if (pidOf(other) === pidOf(id)) return toast('Les deux extrémités de la CF doivent être sur deux pièces différentes.');
+    }
     pick.push(id);
-    if (pick.length === 2) { const [a, b] = pick; setTool('select'); cfDialog(a, b); }
-    else { render(); renderProps(); }
+    if (pick.length === 2) {
+      const [ra, rb] = pick; pick = []; setTool('select');
+      cfDialog(pidOf(ra), pidOf(rb), null, { a: SF(ra) ? ra : null, b: SF(rb) ? rb : null });
+    } else { render(); renderProps(); }
     updateTip(); return;
   }
 
@@ -336,6 +346,14 @@ svg.addEventListener('pointerdown', e => {
   }
   if (h && h.kind === 'bend') {
     drag = { type: 'bend', l: L(h.id) || C(h.id), start: pt, snap: snapshot(), moved: false };
+    return;
+  }
+  if (h && h.kind === 'cycleBend') {
+    const cycle = h.id === 'draft' ? cycleDraft : CY(h.id);
+    const key = h.key != null ? h.key : 'free:' + h.edge;
+    const geom = cycleCurveChords.get((cycle?.id || 'draft') + '|' + key);
+    if (!cycle || !geom) return;
+    drag = { type: 'cycleBend', cycle, key, edge: h.edge != null ? Number(h.edge) : null, geom, start: pt, snap: snapshot(), moved: false };
     return;
   }
   if (h && h.kind === 'gtoggle') { toggleCollapse(G(h.id)); return; }
@@ -392,7 +410,7 @@ function startMove(pt) {
   drag = {
     type: 'move', start: pt, snap: snapshot(), moved: false,
     pieces: [...mp].map(P).filter(Boolean).map(p => [p, p.x, p.y]),
-    surfs: surfs.map(x => [x, x.dx, x.dy]),
+    surfs: surfs.map(x => { const o = soff(x); return [x, o.dx, o.dy]; }),
     notes: [...sel].map(id => (S().notes || []).find(n => n.id === id)).filter(Boolean).map(n => [n, n.x, n.y]),
     attached
   };
@@ -443,7 +461,13 @@ svg.addEventListener('pointermove', e => {
     if (!drag.moved && Math.hypot(dx, dy) * S().view.k < 3) return;
     if (!drag.moved) { checkpoint(drag.snap); drag.moved = true; lastDown.t = 0; }
     drag.pieces.forEach(([p, x, y]) => { p.x = x + dx; p.y = y + dy; });
-    drag.surfs.forEach(([s, x, y]) => { const p = P(s.pieceId); s.pinned = true; s.ang = angleOnPiece(p, p.x + x + dx, p.y + y + dy); });
+    drag.surfs.forEach(([s, x, y]) => {
+      const host = hostMap.get(s.pieceId);
+      /* Surface affichée sur un groupe réduit : on ne fige que le placement
+         compact (cang/cpinned). Le mode développé garde son propre réglage. */
+      if (host) { s.cpinned = true; s.cang = angleOnPiece(host, host.x + x + dx, host.y + y + dy); return; }
+      const p = P(s.pieceId); s.pinned = true; s.ang = angleOnPiece(p, p.x + x + dx, p.y + y + dy);
+    });
     drag.notes.forEach(([n, x, y]) => { n.x = x + dx; n.y = y + dy; });
     drag.attached.forEach(gps => {
       gps.o.x = gps.x + dx; gps.o.y = gps.y + dy;
@@ -494,6 +518,15 @@ svg.addEventListener('pointermove', e => {
     if (!drag.moved) { checkpoint(drag.snap); drag.moved = true; }
     const g = linkGeom(drag.l), dx = g.bx - g.ax, dy = g.by - g.ay, len = Math.hypot(dx, dy) || 1;
     drag.l.bend = (pt.x - (g.ax + g.bx) / 2) * -dy / len + (pt.y - (g.ay + g.by) / 2) * dx / len;
+    render();
+  }
+  if (drag.type === 'cycleBend') {
+    if (!drag.moved && Math.hypot(pt.x - drag.start.x, pt.y - drag.start.y) * S().view.k < 3) return;
+    if (!drag.moved) { checkpoint(drag.snap); drag.moved = true; }
+    const { a, b, nx, ny } = drag.geom;
+    const off = Math.round(((pt.x - (a.x + b.x) / 2) * nx + (pt.y - (a.y + b.y) / 2) * ny) * 2);
+    if (drag.edge != null) { if (drag.cycle.edges[drag.edge]) drag.cycle.edges[drag.edge].bend = off; }
+    else { drag.cycle.bends = drag.cycle.bends || {}; drag.cycle.bends[drag.key] = off; }
     render();
   }
 });

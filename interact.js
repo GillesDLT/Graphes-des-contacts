@@ -301,12 +301,21 @@ svg.addEventListener('pointerdown', e => {
     return;
   }
   if (tool === 'cfg') {
-    const id = pieceOfHit(h);
-    if (!id) return toast('Choisissez deux pièces. Développez les groupes fonctionnels si nécessaire.');
-    if (pick[0] === id) return toast('Choisissez une pièce différente pour la CF.');
+    /* Chaque extrémité peut être une pièce (nouvelle surface) ou une surface existante. */
+    const pidOf = id => { const f = SF(id); return f ? f.pieceId : id; };
+    if (!h || !['piece', 'surface', 'nominal'].includes(h.kind)) return toast('Choisissez deux pièces ou deux surfaces, sur deux pièces différentes. Développez les groupes fonctionnels si nécessaire.');
+    const id = h.kind === 'surface' ? h.id : pieceOfHit(h);
+    if (!id) return toast('Choisissez une pièce ou une surface pour cette extrémité.');
+    if (pick.length === 1) {
+      const other = pick[0];
+      if (other === id) return toast('Choisissez une extrémité différente pour la CF.');
+      if (pidOf(other) === pidOf(id)) return toast('Les deux extrémités de la CF doivent être sur deux pièces différentes.');
+    }
     pick.push(id);
-    if (pick.length === 2) { const [a, b] = pick; setTool('select'); cfDialog(a, b); }
-    else { render(); renderProps(); }
+    if (pick.length === 2) {
+      const [ra, rb] = pick; pick = []; setTool('select');
+      cfDialog(pidOf(ra), pidOf(rb), null, { a: SF(ra) ? ra : null, b: SF(rb) ? rb : null });
+    } else { render(); renderProps(); }
     updateTip(); return;
   }
 

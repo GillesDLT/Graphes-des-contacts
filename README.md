@@ -191,10 +191,13 @@ fonctionnels permettent de les réduire ou de les développer.
 
 ### Créer une CF
 
-1. Cliquer sur **CF**, puis sur deux pièces différentes. Les couleurs des deux
-   pièces sont affichées dans la fenêtre.
-2. Pour chaque extrémité, choisir une **surface existante** de la pièce ou une
-   nouvelle surface (type + nombre de répétitions).
+1. Cliquer sur **CF**, puis sur **deux pièces différentes** — ou directement sur
+   **deux surfaces** (une par pièce). Une extrémité peut être une pièce et
+   l'autre une surface déjà existante. Les couleurs des deux pièces sont
+   affichées dans la fenêtre.
+2. Pour chaque extrémité, garder la surface cliquée, en choisir une autre
+   **surface existante** de la pièce ou créer une nouvelle surface
+   (type + nombre de répétitions).
 3. Saisir un nom : texte, nombre ou vide. Il doit être unique dans la feuille ;
    une seule CF sans nom est autorisée.
 4. Ajouter si besoin un **point** (ex. A, O) et une **normale** (`x`, `y`, `z`

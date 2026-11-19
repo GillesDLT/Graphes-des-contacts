@@ -59,10 +59,10 @@ function surfSVG(s) {
   /* Surface partagée par plusieurs CF en couleur : anneau divisé, une portion par CF. */
   const ring = !blackCF && !marked && cfs.length > 1 ? cfs.map((c, i) => {
     const per = TAU * s.r / cfs.length;
-    return `<circle cx="${r1(c.x)}" cy="${r1(c.y)}" r="${s.r}" fill="none" stroke="${c.color}" stroke-width="${s.sw}" stroke-dasharray="${r1(per)} ${r1(per * (cfs.length - 1))}" stroke-dashoffset="${r1(-per * i)}"/>`;
+    return `<circle cx="${r1(c.x)}" cy="${r1(c.y)}" r="${s.r}" fill="none" stroke="${c.color}" stroke-width="${SURF_SW}" stroke-dasharray="${r1(per)} ${r1(per * (cfs.length - 1))}" stroke-dashoffset="${r1(-per * i)}"/>`;
   }).join('') : '';
   const title = cfs.length ? `Surface de ${esc(cfs.map(c => cfDisplayName(c)).join(' et '))}` : 'Double-clic pour nommer la surface (vide = nom automatique)';
-  return `<g data-id="${s.id}" data-kind="surface"><title>${title}</title><circle cx="${r1(c.x)}" cy="${r1(c.y)}" r="${s.r}" fill="${s.color}" stroke="${stroke}" stroke-width="${marked ? 2.2 : s.sw}"${marked ? ' stroke-dasharray="6 4"' : ''}/>${ring}` +
+  return `<g data-id="${s.id}" data-kind="surface"><title>${title}</title><circle cx="${r1(c.x)}" cy="${r1(c.y)}" r="${s.r}" fill="${s.color}" stroke="${stroke}" stroke-width="${SURF_SW}"${marked ? ' stroke-dasharray="6 4"' : ''}/>${ring}` +
     `<text x="${r1(c.x)}" y="${r1(c.y + (s.count > 1 ? -3 : SURF_FONT * 0.35))}" text-anchor="middle" font-size="${SURF_FONT}" fill="${tc}">${s.count > 1 ? `<tspan x="${r1(c.x)}">${s.count}x</tspan><tspan x="${r1(c.x)}" dy="15">${esc(name)}</tspan>` : esc(name)}</text></g>`;
 }
 function linkGeom(l) {
@@ -231,9 +231,18 @@ function internalNodePoint(id, piece) {
   const norm = Math.max(1, Math.hypot(dx / Math.max(1, piece.rx - 1), dy / Math.max(1, piece.ry - 1)));
   return { x: piece.x + dx / norm, y: piece.y + dy / norm, r: 0 };
 }
+/* Courbes du cycle : chaque segment est mémorisé (extrémités monde) pour que le
+   trait puisse être saisi et courbé à la souris, comme les courbures de liaison. */
+const cycleCurveChords = new Map();
+const cycleCurveKey = (cycle, key) => (cycle?.id || 'draft') + '|' + key;
+function cycleBendValue(cycle, key) {
+  const v = cycle?.bends?.[key];
+  return Number.isFinite(v) ? v : null;
+}
 function cycleInternalSVG(cycles) {
+  cycleCurveChords.clear();
   const connections = new Map();
-  cycles.forEach(c => cycleInternalConnections(c).forEach(e => connections.set(e.key, { ...e, color: c.color || DEFAULT_CYCLE_COLOR })));
+  cycles.forEach(c => cycleInternalConnections(c).forEach(e => connections.set(e.key, { ...e, color: c.color || DEFAULT_CYCLE_COLOR, cycle: c })));
   return [...connections.values()].map(e => {
     const p = P(e.pieceId); if (!p || isHiddenPiece(p.id)) return '';
     const a = internalNodePoint(e.a, p), b = internalNodePoint(e.b, p); if (!a || !b) return '';
@@ -242,10 +251,32 @@ function cycleInternalSVG(cycles) {
       return { x: point.x + dx / len * point.r, y: point.y + dy / len * point.r };
     };
     const start = trim(a), end = trim(b), dx = end.x - start.x, dy = end.y - start.y, len = Math.hypot(dx, dy);
-    const width = Math.min(12, Math.min(p.rx, p.ry) * 0.12), nx = len > 1 ? -dy / len : 0, ny = len > 1 ? dx / len : 1;
-    const path = `M${r1(start.x)},${r1(start.y)}C${r1(p.x + nx * width)},${r1(p.y + ny * width)} ${r1(p.x - nx * width)},${r1(p.y - ny * width)} ${r1(end.x)},${r1(end.y)}`;
-    return `<path data-cycle-internal="${e.key}" data-piece="${p.id}" d="${path}" fill="none" stroke="${e.color}" stroke-width="2.2" stroke-dasharray="6 4" stroke-linecap="round" pointer-events="none"/>`;
+    const nx = len > 1 ? -dy / len : 0, ny = len > 1 ? dx / len : 1;
+    cycleCurveChords.set(cycleCurveKey(e.cycle, e.key), { a: start, b: end, nx, ny });
+    const bend = cycleBendValue(e.cycle, e.key), width = Math.min(12, Math.min(p.rx, p.ry) * 0.12);
+    const path = bend == null
+      ? `M${r1(start.x)},${r1(start.y)}C${r1(p.x + nx * width)},${r1(p.y + ny * width)} ${r1(p.x - nx * width)},${r1(p.y - ny * width)} ${r1(end.x)},${r1(end.y)}`
+      : `M${r1(start.x)},${r1(start.y)}Q${r1((start.x + end.x) / 2 + nx * bend)},${r1((start.y + end.y) / 2 + ny * bend)} ${r1(end.x)},${r1(end.y)}`;
+    return `<path data-cycle-bend="${e.cycle.id || 'draft'}" data-cycle-key="${e.key}" data-piece="${p.id}" d="${path}" fill="none" stroke="${e.color}" stroke-width="2.2" stroke-dasharray="6 4" stroke-linecap="round" pointer-events="stroke" style="cursor:move"><title>Glisser pour courber le trait du cycle</title></path>`;
   }).join('');
+}
+/* Segments directs : deux surfaces enchaînées sans liaison. */
+function cycleFreeSVG(cycles) {
+  const out = [];
+  for (const c of cycles) for (let i = 0; i < (c.edges || []).length; i++) {
+    const e = c.edges[i]; if (e.kind !== 'free') continue;
+    const sa = SF(e.sa), sb = SF(e.sb); if (!sa || !sb) continue;
+    const A = spos(sa), B = spos(sb), dx = B.x - A.x, dy = B.y - A.y, len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len, uy = dy / len;
+    const start = { x: A.x + ux * (sa.r + 2), y: A.y + uy * (sa.r + 2) }, end = { x: B.x - ux * (sb.r + 2), y: B.y - uy * (sb.r + 2) };
+    if ((end.x - start.x) * ux + (end.y - start.y) * uy <= 0) continue;
+    const nx = -uy, ny = ux, key = 'free:' + i;
+    cycleCurveChords.set(cycleCurveKey(c, key), { a: start, b: end, nx, ny });
+    const bend = Number.isFinite(e.bend) ? e.bend : Math.max(26, len * 0.24);
+    const path = `M${r1(start.x)},${r1(start.y)}Q${r1((start.x + end.x) / 2 + nx * bend)},${r1((start.y + end.y) / 2 + ny * bend)} ${r1(end.x)},${r1(end.y)}`;
+    out.push(`<path data-cycle-bend="${c.id || 'draft'}" data-cycle-edge="${i}" d="${path}" fill="none" stroke="${c.color || DEFAULT_CYCLE_COLOR}" stroke-width="2.2" stroke-dasharray="6 4" stroke-linecap="round" pointer-events="stroke" style="cursor:move"><title>Trait direct du cycle — glisser pour le courber</title></path>`);
+  }
+  return out.join('');
 }
 
 function noteLines(note) {
@@ -291,7 +322,7 @@ function render() {
   $('#l-reffill').innerHTML = s.groups.filter(g => g.kind === 'ref').slice().reverse().map(groupFillSVG).join('');
   $('#l-nominal').innerHTML = nominalSVG();
   $('#l-nominal-labels').innerHTML = nominalSVG(true);
-  $('#l-cycle-internal').innerHTML = cycleInternalSVG(visibleCycles);
+  $('#l-cycle-internal').innerHTML = cycleInternalSVG(visibleCycles) + cycleFreeSVG(visibleCycles);
   const vis = s.liaisons.filter(liaisonVisible);
   $('#l-links').innerHTML = vis.map(linkLineSVG).join('');
   $('#l-torseurs').innerHTML = torseursSVG(vis);
@@ -437,8 +468,8 @@ const TIPS = {
   rep: '<b>Ctrl + clic</b> sur les pièces répétées ; <b>clic sur une surface de CF</b> pour inclure / retirer sa CF entière — <b>Entrée</b> pour valider',
   fonc: '<b>Ctrl + clic</b> sur les pièces ; <b>clic sur un titre de répétition visible</b> pour l’inclure / le retirer du contour, sans ajouter ses pièces — <b>Entrée</b> pour valider',
   ref: '<b>Ctrl + clic</b> sur les surfaces du système de référence — <b>Entrée</b> pour valider',
-  cfg: '<b>Clic</b> sur 2 pièces pour créer une CF avec un nom libre unique ; chaque extrémité utilise une surface existante ou une nouvelle surface, avec un point et une normale facultatifs',
-  cycle: '<b>Clic ou Ctrl+clic</b> sur une surface de CF, puis les surfaces ou références — finir sur l’autre surface de la même CF. <b>Ctrl+clic sur la dernière étape</b> : retirer',
+  cfg: '<b>Clic</b> sur 2 pièces ou sur 2 surfaces (une par pièce) pour créer une CF avec un nom libre unique ; une extrémité peut aussi être une surface existante choisie directement sur le graphe',
+  cycle: '<b>Clic ou Ctrl+clic</b> sur une surface de CF, puis les surfaces ou références dans l’ordre voulu — finir sur l’autre surface de la même CF. Sans liaison, un trait direct est tracé avec un avertissement. Les traits courbes se glissent pour les courber. <b>Ctrl+clic sur la dernière étape</b> : retirer',
   pipette: '<b>Clic</b> sur un élément pour prélever sa couleur',
   paint: '<b>Clic</b> sur un élément pour lui appliquer la couleur courante',
   note: '<b>Clic</b> sur le graphe pour ajouter une note. Elle se déplace ensuite avec l’outil Déplacer — <b>N</b>',
@@ -451,8 +482,8 @@ function updateTip() {
   if (tool === 'spec' && editSpecId) return showTip('<b>Composants liés</b> : clic sur une surface ou un groupe de la même pièce pour l’ajouter / le retirer — <b>Entrée</b> pour terminer');
   if (tool === 'spec' && pick.length) return showTip(`<b>${pick.length} composant(s) sélectionné(s)</b> — tous doivent appartenir à la même pièce — <b>Entrée</b> pour créer la spécification`);
   if (tool === 'liaison' && pick.length === 1) return showTip(`1<sup>re</sup> pièce : <b>${esc(P(pick[0])?.name)}</b> — <b>Ctrl + clic</b> sur la 2<sup>e</sup> pièce`);
-  if (tool === 'cfg' && pick.length === 1) return showTip(`1<sup>re</sup> pièce : <b>${esc(endName(pick[0]))}</b> — clic sur une autre pièce`);
-  if (tool === 'cycle' && cycleDraft) return showTip(`<b>${esc(cfDisplayName(C(cycleDraft.cfId)))}</b> : ${cycleDraft.nodes.length} nœud(s) — <b>Clic ou Ctrl+clic</b> sur un contact / une référence — <b>Ctrl+clic sur la dernière étape</b> ou <b>Retour arrière</b> : retirer`);
+  if (tool === 'cfg' && pick.length === 1) return showTip(`1<sup>re</sup> extrémité : <b>${esc(endName(pick[0]))}</b> — clic sur une pièce ou une surface d'une autre pièce`);
+  if (tool === 'cycle' && cycleDraft) return showTip(`<b>${esc(cfDisplayName(C(cycleDraft.cfId)))}</b> : ${cycleDraft.nodes.length} nœud(s) — <b>Clic ou Ctrl+clic</b> sur une surface ou une référence (sans liaison : trait direct) — <b>Ctrl+clic sur la dernière étape</b> ou <b>Retour arrière</b> : retirer`);
   showTip(TIPS[tool]);
 }
 let toastT;

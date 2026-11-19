@@ -173,6 +173,7 @@ function loadDoc(o) {
       if (f.count == null) f.count = 1;
       if (!Number.isSafeInteger(f.count) || f.count < 1) throw new Error('Répétition de surface invalide.');
       if (f.ang == null) { const p = s.pieces.find(p => p.id === f.pieceId); f.ang = p ? Math.atan2(f.dy / p.ry, f.dx / p.rx) : 0; }
+      f.sw = SURF_SW; // contour uniforme, y compris pour les anciennes surfaces de CF
     });
     connections(s).forEach(l => {
       if (l.curved && (!Number.isFinite(l.bend))) throw new Error('Courbure de lien invalide.');
@@ -272,6 +273,8 @@ function endPiece(id) { const s = SF(id); return s ? s.pieceId : id; }
    Elle s'oriente vers la (les) surface(s) liée(s) ; l'ordre le long du bord est conservé et
    l'espacement minimal est imposé (régression isotone), ce qui évite les croisements de liaisons. */
 const SURF_FONT = 12, SURF_GAP = 7, SURF_SPACING = 5, TAU = 2 * Math.PI;
+/* Épaisseur de contour identique pour toutes les surfaces, reliée à une CF ou non. */
+const SURF_SW = 1.5;
 const PIECE_R = 95;
 let _mctx = null;
 function textW(t, font) {
@@ -514,7 +517,7 @@ function createPiece({ name, color, num, x, y }) {
 }
 function createSurface(pid, type, at, angle = -Math.PI / 4) {
   const p = P(pid);
-  const s = { id: uid(), pieceId: pid, type, idx: nextSurfIdx(pid), count: 1, dx: 0, dy: 0, r: 24, color: '#ffffff', stroke: '#1a1a1a', sw: 1.5, name: '', pinned: false };
+  const s = { id: uid(), pieceId: pid, type, idx: nextSurfIdx(pid), count: 1, dx: 0, dy: 0, r: 24, color: '#ffffff', stroke: '#1a1a1a', sw: SURF_SW, name: '', pinned: false };
   s.ang = at ? angleOnPiece(p, at.x, at.y) : Math.atan2(Math.sin(angle) / p.ry, Math.cos(angle) / p.rx);
   S().surfaces.push(s); return s;
 }

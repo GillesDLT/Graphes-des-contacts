@@ -191,10 +191,13 @@ fonctionnels permettent de les réduire ou de les développer.
 
 ### Créer une CF
 
-1. Cliquer sur **CF**, puis sur deux pièces différentes. Les couleurs des deux
-   pièces sont affichées dans la fenêtre.
-2. Pour chaque extrémité, choisir une **surface existante** de la pièce ou une
-   nouvelle surface (type + nombre de répétitions).
+1. Cliquer sur **CF**, puis sur **deux pièces différentes** — ou directement sur
+   **deux surfaces** (une par pièce). Une extrémité peut être une pièce et
+   l'autre une surface déjà existante. Les couleurs des deux pièces sont
+   affichées dans la fenêtre.
+2. Pour chaque extrémité, garder la surface cliquée, en choisir une autre
+   **surface existante** de la pièce ou créer une nouvelle surface
+   (type + nombre de répétitions).
 3. Saisir un nom : texte, nombre ou vide. Il doit être unique dans la feuille ;
    une seule CF sans nom est autorisée.
 4. Ajouter si besoin un **point** (ex. A, O) et une **normale** (`x`, `y`, `z`
@@ -238,8 +241,16 @@ Le même outil affiche le nombre de cycles indépendants (nombre cyclomatique) :
 1. Cliquer sur **Cycle**.
 2. Commencer par une surface de la CF étudiée.
 3. Cliquer successivement sur les surfaces ou les groupes de référence du
-   parcours, en suivant les contacts existants.
+   parcours : le cycle suit **l’ordre des clics**.
 4. Terminer sur l’autre surface de **la même CF**, puis valider.
+
+Le cycle est permissif : lorsque deux surfaces successives sont reliées par une
+liaison, le cycle reprend le trait de cette liaison ; sinon il trace un **trait
+direct** et un message d’avertissement le signale, sans rien bloquer.
+
+Les traits courbes du cycle (traits directs et courbes internes aux pièces)
+peuvent être **glissés à la souris** pour les écarter ou les rendre plus lisibles,
+comme la courbure d’une liaison. Le réglage est conservé à l’enregistrement.
 
 Le cycle contient exactement une CF. Les contacts, surfaces et références
 utilisent la couleur du cycle, avec des courbes pointillées pour les connexions
