@@ -587,7 +587,11 @@ function onDouble(h, pt, e) {
   if (!h || (h.kind === 'group' && G(h.id).kind === 'rep')) return pieceDialog(pt);
   if (h.kind === 'piece') { setTool('liaison'); pick = [h.id]; render(); updateTip(); return; }
   if (h.kind === 'liaison' || h.kind === 'llabel') { const l = L(h.id); return liaisonDialog(SF(l.a).pieceId, SF(l.b).pieceId, l.id); }
-  if (h.kind === 'torseur') { const l = L(h.id); return l ? liaisonDialog(SF(l.a).pieceId, SF(l.b).pieceId, l.id) : null; }
+  if (h.kind === 'torseur') {
+    const l = L(h.id);
+    if (l) return liaisonDialog(SF(l.a).pieceId, SF(l.b).pieceId, l.id);
+    const c = C(h.id); return c ? cfDialog(endPiece(c.a), endPiece(c.b), c.id) : null;
+  }
   if (h.kind === 'cfg') { const c = C(h.id); return cfDialog(endPiece(c.a), endPiece(c.b), c.id); }
   if (h.kind === 'surface') return surfaceNameDialog(h.id);
   if (h.kind === 'group' || h.kind === 'cfg' || h.kind === 'surface') { const i = $('#props [data-k=name]'); if (i) { i.focus(); i.select(); } }

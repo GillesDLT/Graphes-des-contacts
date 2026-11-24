@@ -202,7 +202,7 @@ function cfDialog(pidA, pidB, editId, pre = {}) {
         if (!normale) { $('#cfNormCustom', body).classList.add('invalid'); $('#cfErr', body).textContent = 'Précisez la direction personnalisée ou choisissez x, y ou z.'; return false; }
       } else if (mode !== 'none') normale = mode;
       const point = $('[data-det="point"]', body).value.trim();
-      if (state.sa === state.sb) { $('#cfErr', body).textContent = 'Les deux extrémités ne peuvent pas être identiques.'; return false; }
+      if (state.sa === state.sb && !state.sa.startsWith('new:')) { $('#cfErr', body).textContent = 'Les deux extrémités ne peuvent pas être identiques.'; return false; }
       const plannedSurfaces = [];
       const endId = (val, p) => {
         if (val.startsWith('ex:') || val.startsWith('grp:')) return val.slice(val.indexOf(':') + 1);

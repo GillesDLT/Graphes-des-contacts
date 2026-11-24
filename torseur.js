@@ -27,11 +27,14 @@ function dirAxis(v) {
 
 /* Composantes nulles : un mouvement libre interdit l'action correspondante.
    D'après le tableau classique des liaisons usuelles (torseur des actions transmissibles). */
+/* Une CF n'impose aucune liaison : son torseur est complet (6 composantes, aucune nulle). */
+function isCFTorseur(l) { return !!l && S().cfgs.includes(l); }
 function torseurDefaults(l) {
+  const v = { X: torseurLetter('X'), L: torseurLetter('L'), Y: torseurLetter('Y'), M: torseurLetter('M'), Z: torseurLetter('Z'), N: torseurLetter('N') };
+  if (isCFTorseur(l)) return v;
   const sym = ltype(l.type).symbol || 'GEN';
   const d = l.details || {};
   const axis = dirAxis(d.axe), norm = dirAxis(d.normale);
-  const v = { X: torseurLetter('X'), L: torseurLetter('L'), Y: torseurLetter('Y'), M: torseurLetter('M'), Z: torseurLetter('Z'), N: torseurLetter('N') };
   const zeroForce = a => { if (a) v[FORCE_KEY[a]] = '0'; };
   const zeroMoment = a => { if (a) v[MOMENT_KEY[a]] = '0'; };
   switch (sym) {
@@ -69,8 +72,8 @@ function torseurValues(l) {
 }
 const torseurPoint = l => (l.details && String(l.details.point || '').trim()) || 'A';
 function torseurTitle(l) {
-  const sa = SF(l.a), sb = SF(l.b);
-  const n1 = sa && P(sa.pieceId) ? P(sa.pieceId).num : '?', n2 = sb && P(sb.pieceId) ? P(sb.pieceId).num : '?';
+  const p1 = P(endPiece(l.a)), p2 = P(endPiece(l.b));
+  const n1 = p1 ? p1.num : '?', n2 = p2 ? p2.num : '?';
   return `${n1}/${n2}`;
 }
 
@@ -82,35 +85,24 @@ const bracePath = (x, y0, h, dir) => {
     `C${dx(-1)},${f(y0 + h * 0.51)} ${dx(0)},${f(y0 + h * 0.53)} ${dx(0)},${f(y0 + h * 0.6)}` +
     `C${dx(0)},${f(y0 + h * 0.84)} ${dx(1)},${f(y0 + h)} ${dx(5)},${f(y0 + h)}`;
 };
-/* Bloc centré sous le point (x, y) : préfixe {T_{n1/n2}}_{A} =, accolade, grille 3×2, accolade, indice A */
+/* Bloc centré sous le point (x, y) : accolade, grille 3×2, accolade, indice A (le résultat seul, sans {T…} =).
+   Valeurs et point passent par le rendu indicé : u_123 → u avec 123 en indice. */
 function torseurSVG(l, x, y) {
-  const v = torseurValues(l), sub = torseurPoint(l), title = torseurTitle(l);
+  const v = torseurValues(l), sub = torseurPoint(l);
   const fs = 12, sfs = 8, rh = 13;
-  const F = `${fs}px "Segoe UI", Arial, sans-serif`, FI = `italic ${fs}px "Segoe UI", Arial, sans-serif`, FS = `${sfs}px "Segoe UI", Arial, sans-serif`;
   const cells = [[v.X, v.L], [v.Y, v.M], [v.Z, v.N]];
-  const cw1 = Math.max(...cells.map(row => textW(row[0], F))) + 16, cw2 = Math.max(...cells.map(row => textW(row[1], F))) + 16;
-  const gw = cw1 + cw2, gh = 3 * rh, gap = 12, brW = 7;
-  // préfixe : { T 1/2 } A/R =  (positions explicites pour éviter tout chevauchement)
-  const wBrace = textW('{', F), wT = textW('T', FI), wTitle = textW(title, FS), wSub = textW(sub, FS), wEq = textW(' =', F);
-  const preW = wBrace + wT + wTitle + wBrace + wSub + wEq;
-  const total = preW + gap + brW + gw + brW + 8 + wSub;
+  const cw1 = Math.max(...cells.map(row => richTextWidth(row[0], fs))) + 16, cw2 = Math.max(...cells.map(row => richTextWidth(row[1], fs))) + 16;
+  const gw = cw1 + cw2, gh = 3 * rh, brW = 7;
+  const wSub = richTextWidth(sub, sfs);
+  const total = brW + gw + brW + 8 + wSub;
   const left = x - total / 2, top = y, gy = top + 4;
-  const gx = left + preW + gap + brW, colX = [gx + cw1 / 2, gx + cw1 + cw2 / 2], rowY = [gy + 10, gy + 10 + rh, gy + 10 + 2 * rh];
-  const halo = ` stroke="#ffffff" stroke-width="3" stroke-linejoin="round" paint-order="stroke"`;
+  const gx = left + brW, colX = [gx + cw1 / 2, gx + cw1 + cw2 / 2], rowY = [gy + 10, gy + 10 + rh, gy + 10 + 2 * rh];
   const cellsSVG = cells.map((row, j) => row.map((val, i) =>
-    `<text x="${r1(colX[i])}" y="${r1(rowY[j])}" text-anchor="middle" font-size="${fs}" fill="#1f1f1f"${halo}>${esc(val)}</text>`
+    richTextSVG(val, colX[i], rowY[j], fs, '', '#1f1f1f', true)
   ).join('')).join('');
-  const px = [left, left + wBrace, left + wBrace + wT, left + wBrace + wT + wTitle, left + wBrace + wT + wTitle + wBrace, left + wBrace + wT + wTitle + wBrace + wSub];
-  const midY = gy + gh / 2 + 4;
-  const prefix = `<text y="${r1(midY)}" font-size="${fs}" fill="#1f1f1f"${halo}>` +
-    `<tspan x="${r1(px[0])}">{</tspan><tspan x="${r1(px[1])}" font-style="italic">T</tspan>` +
-    `<tspan x="${r1(px[2])}" y="${r1(midY + 4)}" font-size="${sfs}">${esc(title)}</tspan>` +
-    `<tspan x="${r1(px[3])}" y="${r1(midY)}">}</tspan>` +
-    `<tspan x="${r1(px[4])}" y="${r1(midY + 4)}" font-size="${sfs}">${esc(sub)}</tspan>` +
-    `<tspan x="${r1(px[5])}" y="${r1(midY)}"> =</tspan></text>`;
-  const suffix = `<text x="${r1(gx + gw + brW + 8)}" y="${r1(gy + gh - 1)}" font-size="${sfs}" fill="#1f1f1f"${halo}>${esc(sub)}</text>`;
-  return `<g data-id="${l.id}" data-kind="torseur"><title>Torseur de ${esc(liaisonLabel(l))} — valeurs modifiables dans le panneau</title>` +
-    prefix +
+  const suffix = richTextSVG(sub, gx + gw + brW + 8, gy + gh - 1, sfs, '', '#1f1f1f', true, { anchor: 'start' });
+  const label = isCFTorseur(l) ? 'CF ' + cfDisplayName(l) : liaisonLabel(l);
+  return `<g data-id="${l.id}" data-kind="torseur"><title>Torseur de ${esc(label)} — valeurs modifiables dans le panneau</title>` +
     `<path d="${bracePath(gx - 4, gy, gh, 1)}" fill="none" stroke="#1f1f1f" stroke-width="1.3"/>` +
     `<path d="${bracePath(gx + gw + 4, gy, gh, -1)}" fill="none" stroke="#1f1f1f" stroke-width="1.3"/>` +
     cellsSVG + suffix + '</g>';

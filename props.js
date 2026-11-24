@@ -78,7 +78,7 @@ function piecePanel(p) {
     <div class="btns"><button data-pa="circle" title="Rendre la pièce circulaire en un clic (même rayon en largeur et hauteur)">◯ Cercle parfait</button>${p.lab ? '<button data-pa="labauto" title="Remettre le nom à sa place automatique, centrée dans la pièce">↺ Recentre le nom</button>' : ''}${p.nominal ? '<button data-pa="nominalauto">Réinitialiser la position du nominal 0</button>' : ''}</div>
     <p class="muted">Glisser le nom pour le déplacer ; double-clic sur le nom pour le recentrer.</p>
     <h4>Surfaces (${surfs.length})</h4>
-    <div>${surfs.map(s => `<button data-goto="${s.id}" style="margin:2px">${esc(sname(s))}</button>`).join('') || '<span class="muted">aucune</span>'}</div>
+    <div>${surfs.map(s => `<button data-goto="${s.id}" style="margin:2px">${vecHTML(sname(s))}</button>`).join('') || '<span class="muted">aucune</span>'}</div>
     <div class="btns"><button data-pa="linkfrom">⟷ Lier à une autre pièce…</button>
     <button data-pa="addsurface" title="Ajouter une surface libre : une bulle isolée, sans liaison ni CF">◦ Surface libre</button>
     <button data-pa="dup">⧉ Dupliquer</button><button data-pa="del" class="danger">🗑 Supprimer</button></div>`;
@@ -86,7 +86,7 @@ function piecePanel(p) {
 function surfPanel(s) {
   const p = P(s.pieceId), ls = S().liaisons.filter(l => l.a === s.id || l.b === s.id);
   const cfs = cfOfSurfaceList(s.id), cf = cfs[0];
-  return `<h3>◦ Surface <b>${esc(sname(s))}</b></h3>
+  return `<h3>◦ Surface <b>${vecHTML(sname(s))}</b></h3>
     ${fRow('Pièce', `<button data-goto="${p.id}">${esc(p.name)} (${p.num})</button>`)}
     ${fRow('Type', fSel('type', s.type, doc.settings.surfaceTypes.map(t => [t.code, t.code + ' — ' + t.label])))}
     ${fRow('N° surface', fNum('idx', s.idx, 1))}
@@ -105,7 +105,7 @@ function linkPanel(l) {
   const sa = SF(l.a), sb = SF(l.b), pa = P(sa.pieceId), pb = P(sb.pieceId), t = ltype(l.type);
   return `<h3>⟷ Liaison ${esc(l.type)}</h3>
     <div style="display:flex;gap:10px;align-items:center"><div class="ld-schema">${symbolSVG(l.type, l.details, pa.color, pb.color, 110)}</div>
-    <div><b>${esc(t.label)}</b><br>${l.count > 1 ? l.count + ' × ' : ''}${vecHTML(detailText(l.type, l.details))}<br><span class="muted">${esc(sname(sa))} ⟷ ${esc(sname(sb))}</span></div></div>
+    <div><b>${esc(t.label)}</b><br>${l.count > 1 ? l.count + ' × ' : ''}${vecHTML(detailText(l.type, l.details))}<br><span class="muted">${vecHTML(sname(sa))} ⟷ ${vecHTML(sname(sb))}</span></div></div>
     <div class="btns"><button data-pa="editlink" class="primary">✎ Modifier la liaison…</button></div>
     ${fRow('Répétition', fNum('count', l.count, 1))}
     ${fRow('Libellé', fText('label', l.label, liaisonLabel(Object.assign({}, l, { label: '' })) + ' (auto)'))}
@@ -113,12 +113,12 @@ function linkPanel(l) {
     ${fRow('Couleur trait', fColor('color'))}
     ${curveFields(l)}
     ${torseurFields(l)}
-    <div class="btns"><button data-goto="${sa.id}">${esc(sname(sa))}</button><button data-goto="${sb.id}">${esc(sname(sb))}</button><button data-pa="del" class="danger" title="Supprime la liaison et ses 2 surfaces">🗑 Supprimer (avec ses surfaces)</button></div>`;
+    <div class="btns"><button data-goto="${sa.id}">${vecHTML(sname(sa))}</button><button data-goto="${sb.id}">${vecHTML(sname(sb))}</button><button data-pa="del" class="danger" title="Supprime la liaison et ses 2 surfaces">🗑 Supprimer (avec ses surfaces)</button></div>`;
 }
 function torseurFields(l) {
-  const v = torseurValues(l);
-  return `<h4>Torseur <span class="muted">{T_${esc(torseurTitle(l))}}_{${esc(torseurPoint(l))}}</span></h4>
-    ${fRow('Point', fText('point', (l.details && l.details.point) || '', 'A (défaut)'))}
+  const v = torseurValues(l), cf = isCFTorseur(l);
+  return `<h4>Torseur <span class="muted">${esc(torseurTitle(l))}</span></h4>
+    ${cf ? '' : fRow('Point', fText('point', (l.details && l.details.point) || '', 'A (défaut)'))}
     <div class="torsor-grid">${[['X', 'L'], ['Y', 'M'], ['Z', 'N']].map(([a, b]) =>
       `<label>${esc(torseurLetter(a))}</label><input type="text" data-torsor="${a}" value="${esc(v[a])}" aria-label="Composante ${esc(torseurLetter(a))}">` +
       `<label>${esc(torseurLetter(b))}</label><input type="text" data-torsor="${b}" value="${esc(v[b])}" aria-label="Composante ${esc(torseurLetter(b))}">`).join('')}</div>
@@ -155,6 +155,7 @@ function cfgPanel(c) {
     ${fRow('Affichage', fCheck('inColor', c.inColor !== false, 'Dans sa couleur (sinon noir)'))}
     ${curveFields(c)}
     ${fRow('Libellé', fCheck('labelBox', !!c.labelBox, 'Encadrer le texte sur le trait'))}
+    ${torseurFields(c)}
     <p class="muted">Deux surfaces de cette CF (existantes ou nouvelles), sans surlignage automatique des liaisons. Point et normale facultatifs dans « Modifier les surfaces… ».</p>
     <div class="btns"><button data-goto="${c.a}">${esc(endName(c.a))}</button><button data-goto="${c.b}">${esc(endName(c.b))}</button></div>
     <div class="btns"><button data-pa="editcf">Modifier les surfaces…</button><button data-pa="cfs">Gérer toutes les CF</button><button data-pa="cycles">Gérer les cycles</button><button data-pa="del" class="danger">Supprimer la CF et ses surfaces</button></div>`;
@@ -258,7 +259,7 @@ function wireProps(box, target) {
   $$('[data-torsor]', box).forEach(inp => {
     inp.addEventListener('focus', () => tcp = false);
     inp.addEventListener('input', () => {
-      if (!target || kindOf(target.id) !== 'liaison') return;
+      if (!target || !['liaison', 'cfg'].includes(kindOf(target.id))) return;
       if (!tcp) { checkpoint(); tcp = true; }
       target.torsor = Object.assign({}, target.torsor, { [inp.dataset.torsor]: inp.value });
       render(); autosave();

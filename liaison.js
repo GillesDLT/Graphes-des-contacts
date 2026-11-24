@@ -53,7 +53,7 @@ function liaisonDialog(pidA, pidB, editId) {
     $('#ldExist', body).innerHTML = ex.length ? `<h4 style="margin:6px 0">Liaisons existantes</h4>` + ex.map(l => {
       const sa = SF(l.a), sb = SF(l.b);
       return `<div class="ld-exist"><span>${symbolSVG(l.type, l.details, P(sa.pieceId).color, P(sb.pieceId).color, 34, false)}</span>
-        <span class="t"><b>${vecHTML(liaisonLabel(l))}</b> ${vecHTML(detailText(l.type, l.details))} — ${esc(sname(sa))} ⟷ ${esc(sname(sb))}</span>
+        <span class="t"><b>${vecHTML(liaisonLabel(l))}</b> ${vecHTML(detailText(l.type, l.details))} — ${vecHTML(sname(sa))} ⟷ ${vecHTML(sname(sb))}</span>
         <button data-edit="${l.id}">Modifier</button><button class="danger" data-del="${l.id}" title="Supprimer">🗑</button></div>`;
     }).join('') : '';
   };

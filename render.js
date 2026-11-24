@@ -63,7 +63,8 @@ function surfSVG(s) {
   }).join('') : '';
   const title = cfs.length ? `Surface de ${esc(cfs.map(c => cfDisplayName(c)).join(' et '))}` : 'Double-clic pour nommer la surface (vide = nom automatique)';
   return `<g data-id="${s.id}" data-kind="surface"><title>${title}</title><circle cx="${r1(c.x)}" cy="${r1(c.y)}" r="${s.r}" fill="${s.color}" stroke="${stroke}" stroke-width="${SURF_SW}"${marked ? ' stroke-dasharray="6 4"' : ''}/>${ring}` +
-    `<text x="${r1(c.x)}" y="${r1(c.y + (s.count > 1 ? -3 : SURF_FONT * 0.35))}" text-anchor="middle" font-size="${SURF_FONT}" fill="${tc}">${s.count > 1 ? `<tspan x="${r1(c.x)}">${s.count}x</tspan><tspan x="${r1(c.x)}" dy="15">${esc(name)}</tspan>` : esc(name)}</text></g>`;
+    (s.count > 1 ? `<text x="${r1(c.x)}" y="${r1(c.y - 3)}" text-anchor="middle" font-size="${SURF_FONT}" fill="${tc}">${s.count}x</text>` + richTextSVG(name, c.x, c.y + 12, SURF_FONT, '', tc, false)
+      : richTextSVG(name, c.x, c.y + SURF_FONT * 0.35, SURF_FONT, '', tc, false)) + '</g>';
 }
 /* Point d'accroche d'une extrémité de lien : centre + rayon d'une surface, ou
    point du contour d'un groupe de référence le plus proche de l'autre extrémité. */
@@ -347,7 +348,7 @@ function render() {
   $('#l-cycle-internal').innerHTML = cycleInternalSVG(visibleCycles) + cycleFreeSVG(visibleCycles);
   const vis = s.liaisons.filter(liaisonVisible);
   $('#l-links').innerHTML = vis.map(linkLineSVG).join('');
-  $('#l-torseurs').innerHTML = torseursSVG(vis);
+  $('#l-torseurs').innerHTML = torseursSVG(vis.concat(s.cfgs.filter(liaisonVisible)));
   $('#l-surfaces').innerHTML = s.surfaces.filter(surfVisible).map(surfSVG).join('');
   $('#l-cfg').innerHTML = s.cfgs.map(cfgSVG).join('');
   $('#l-piece-labels').innerHTML = s.pieces.filter(p => !isHiddenPiece(p.id)).map(pieceNameSVG).join('');

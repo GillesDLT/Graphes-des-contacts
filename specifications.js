@@ -360,7 +360,7 @@ function specFrameLayout(spec) {
   const cells = (spec.cells || []).map(cell => {
     const base = specCellText({ ...cell, mods: [] });
     const mods = (cell.mods || []).filter(id => SPEC_MODIFIER_CHARS.has(id));
-    const baseW = base ? textW(base, m.font) : 0;
+    const baseW = base ? richTextWidth(base, m.fontPx) : 0;
     const modW = m.letter * 1.15;
     const contentW = baseW + mods.length * modW;
     return { text: specCellText(cell), base, mods, baseW, modW, contentW, w: Math.max(minW, contentW + 2 * pad) };
@@ -376,7 +376,7 @@ function specFrameSVG(spec) {
     if (i) s += `<line x1="${r1(x)}" y1="${r1(spec.y)}" x2="${r1(x)}" y2="${r1(spec.y + lay.h)}" stroke="${line}" stroke-width="${ISO_STYLE.strokeFrame}"/>`;
     let cx = x + (cell.w - (cell.contentW || 0)) / 2;
     const cy = spec.y + lay.h / 2;
-    if (cell.base) s += `<text x="${r1(cx)}" y="${r1(cy + lay.letter / 2)}" ${isoTextAttrs(m, false)} fill="${line}">${esc(cell.base)}</text>`;
+    if (cell.base) s += richTextSVG(cell.base, cx, cy + lay.letter / 2, m.fontPx, '', line, false, { anchor: 'start', family: ISO_FONT });
     cx += cell.baseW || 0;
     for (const mod of cell.mods || []) {
       const mid = cx + cell.modW / 2, radius = lay.letter * 0.49 * 1.05;
@@ -474,14 +474,16 @@ function specAnnotationAnchor(spec, from) {
 function specAnnotationSVG(spec) {
   const a = spec.annotation || {}, lay = specAnnotationLayout(spec); if (!lay) return '';
   const baseX = spec.x + 1, baselineY = spec.y - 4;
-  let content = esc(lay.base);
-  if (a.toleranceMode === 'symmetric' && lay.upper) content += `±${esc(lay.upper)}`;
-  else if (a.toleranceMode === 'asymmetric' && (lay.upper || lay.lower)) {
-    const toleranceX = r1(baseX + textW(lay.base, '12px Arial, sans-serif'));
-    content += `<tspan x="${toleranceX}" baseline-shift="super" font-size="8">+${esc(lay.upper)}</tspan><tspan x="${toleranceX}" baseline-shift="sub" font-size="8">−${esc(lay.lower)}</tspan>`;
+  const annOpts = { anchor: 'start', family: 'Arial, sans-serif' }, annColor = '#17191d';
+  let main = lay.base, tol = '';
+  if (a.toleranceMode === 'symmetric' && lay.upper) main += `±${lay.upper}`;
+  else if (a.toleranceMode === 'class' && a.toleranceClass) main += a.toleranceClass;
+  let out = richTextSVG(main, baseX, baselineY, 12, `data-width="${r1(lay.textWidth)}"`, annColor, false, annOpts);
+  if (a.toleranceMode === 'asymmetric' && (lay.upper || lay.lower)) {
+    const toleranceX = r1(baseX + richTextWidth(lay.base, 12));
+    out += richTextSVG('+' + lay.upper, toleranceX, r1(baselineY - 4), 8, '', annColor, false, { anchor: 'start', family: 'Arial, sans-serif' }) +
+      richTextSVG('−' + lay.lower, toleranceX, r1(baselineY + 2), 8, '', annColor, false, { anchor: 'start', family: 'Arial, sans-serif' });
   }
-  else if (a.toleranceMode === 'class' && a.toleranceClass) content += esc(a.toleranceClass);
-  let out = `<text x="${r1(baseX)}" y="${r1(baselineY)}" font-family="Arial, sans-serif" font-size="12" fill="#17191d" text-anchor="start" data-width="${r1(lay.textWidth)}">${content}</text>`;
   if (lay.modifier) {
     const x = baseX + lay.w - lay.badges.reduce((sum, b) => sum + b.w + SPEC_BADGE.gap, 0) - lay.modW;
     const y = baselineY - 11, w = lay.modW;
@@ -514,11 +516,11 @@ function specComplementaryCellSVG(spec, id, x) {
   const symbol = SPEC_COMPLEMENT_CHARS.get(data.sym) || SPEC_COMPLEMENT_CHARS.get('sym');
   const text = String(data.text || ''), pad = ISO_STYLE.framePadFactor * m.letter;
   const symW = Math.max(ISO_STYLE.frameWFactor * m.letter, textW(symbol, m.font) + 2 * pad);
-  const textWpx = text ? textW(text, m.font) + 2 * pad : ISO_STYLE.frameWFactor * m.letter;
+  const textWpx = text ? richTextWidth(text, m.fontPx) + 2 * pad : ISO_STYLE.frameWFactor * m.letter;
   const w = symW + textWpx, y = spec.y, line = '#17191d';
   let out = `<rect x="${r1(x)}" y="${r1(y)}" width="${r1(w)}" height="${r1(h)}" fill="#fff" stroke="${line}" stroke-width="${ISO_STYLE.strokeFrame}"/><line x1="${r1(x + symW)}" y1="${r1(y)}" x2="${r1(x + symW)}" y2="${r1(y + h)}" stroke="${line}" stroke-width="${ISO_STYLE.strokeFrame}"/>`;
   out += `<text x="${r1(x + symW / 2)}" y="${r1(y + h / 2 + m.letter / 2)}" text-anchor="middle" ${isoTextAttrs(m, false)} fill="${line}">${esc(symbol)}</text>`;
-  if (text) out += `<text x="${r1(x + symW + textWpx / 2)}" y="${r1(y + h / 2 + m.letter / 2)}" text-anchor="middle" ${isoTextAttrs(m, false)} fill="${line}">${esc(text)}</text>`;
+  if (text) out += richTextSVG(text, x + symW + textWpx / 2, y + h / 2 + m.letter / 2, m.fontPx, '', line, false, { family: ISO_FONT });
   return { svg: out, w };
 }
 function specSupplementarySVG(spec) {
