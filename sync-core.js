@@ -17,7 +17,7 @@
   const SHEET_FIELDS = ['name', 'color', 'refImage'];
   /* Réglages d'affichage propres à chaque poste : jamais synchronisés, sinon
      cacher les surfaces chez l'un les cacherait chez tout le monde. */
-  const LOCAL_SETTINGS = ['showDetails', 'showSurfaces', 'showTorseurs', 'showNominalZero', 'grid'];
+  const LOCAL_SETTINGS = ['showDetails', 'showSurfaces', 'showTorseurs', 'showNominalZero', 'grid', 'showHints'];
 
   const clone = v => (v === undefined ? undefined : JSON.parse(JSON.stringify(v)));
   const isObj = v => !!v && typeof v === 'object' && !Array.isArray(v);

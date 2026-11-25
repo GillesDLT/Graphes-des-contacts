@@ -362,7 +362,7 @@ function render() {
   renderOverlay();
   if (typeof Collab !== 'undefined') Collab.renderPeers();
   $$('[data-tool]').forEach(b => b.classList.toggle('active', b.dataset.tool === tool));
-  $('[data-act=details]').classList.toggle('active', !!doc.settings.showDetails);
+  syncToggles();
   stage.className = stage.className.replace(/\bt-\w+/g, '').trim() + ' t-' + tool;
 }
 
@@ -501,7 +501,20 @@ const TIPS = {
   spec: '<b>Clic</b> sur une surface ou un groupe de surface pour choisir les composants d’une seule pièce, puis <b>Entrée</b>. La spécification est liée à ces composants et suit la pièce. Les sections et indications se règlent dans le panneau de droite.',
   isoRef: '<b>Clic</b> sur une surface ou un groupe de surfaces d’une seule pièce pour y appliquer un indicateur ISO.'
 };
-function showTip(html) { const t = $('#tip'); t.innerHTML = html || ''; t.classList.toggle('show', !!html); }
+/* Boutons à bascule du ruban : data-toggle = nom du réglage ; actif quand l'option est affichée. */
+function syncToggles() {
+  const on = {
+    details: !!doc.settings.showDetails, grid: !!doc.settings.grid, surfaces: doc.settings.showSurfaces !== false,
+    torseurs: !!doc.settings.showTorseurs, nominal0: !!(S().showNominalZero ?? doc.settings.showNominalZero),
+    hints: doc.settings.showHints !== false, isorefs: doc.settings.showIsoRefs !== false, specs: doc.settings.showSpecs !== false
+  };
+  $$('#toolbar [data-toggle]').forEach(b => {
+    const v = !!on[b.dataset.toggle];
+    b.classList.toggle('active', v); b.setAttribute('aria-pressed', String(v));
+    const st = b.querySelector('.rb-st'); if (st) st.textContent = v ? 'affichées' : 'masquées';
+  });
+}
+function showTip(html) { if (doc.settings.showHints === false) html = ''; const t = $('#tip'); t.innerHTML = html || ''; t.classList.toggle('show', !!html); }
 function updateTip() {
   if (tool === 'spec' && editSpecId) return showTip('<b>Composants liés</b> : clic sur une surface ou un groupe de la même pièce pour l’ajouter / le retirer — <b>Entrée</b> pour terminer');
   if (tool === 'spec' && pick.length) return showTip(`<b>${pick.length} composant(s) sélectionné(s)</b> — tous doivent appartenir à la même pièce — <b>Entrée</b> pour créer la spécification`);

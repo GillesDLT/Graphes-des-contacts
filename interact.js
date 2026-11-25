@@ -663,8 +663,14 @@ document.addEventListener('keyup', e => { if (e.key === ' ') spaceDown = false; 
 document.addEventListener('pointerdown', e => { if (popupEl && !popupEl._keep && !e.composedPath().some(n => n === popupEl || n === svg)) closePopup(); });
 
 /* ===== Barre d'outils ===== */
+/* Onglets du ruban : un seul panneau visible à la fois */
+function showRibbon(name) {
+  $$('#toolbar [data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  $$('#toolbar [data-panel]').forEach(p => { p.hidden = p.dataset.panel !== name; });
+}
 $('#toolbar').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.tab) return showRibbon(b.dataset.tab);
   if (b.dataset.tool) {
     const t = b.dataset.tool;
     if (t === 'piece') { pieceDialog(null); return; }
@@ -705,6 +711,9 @@ async function toolbarAction(a) {
     case 'zoomout': zoomAt(1 / 1.2, r.width / 2, r.height / 2); break;
     case 'fit': fitView(); break;
     case 'grid': doc.settings.grid = !doc.settings.grid; changed(false); break;
+    case 'hints': doc.settings.showHints = doc.settings.showHints === false; changed(false); updateTip(); break;
+    case 'isorefs': doc.settings.showIsoRefs = doc.settings.showIsoRefs === false; changed(false); break;
+    case 'specs': doc.settings.showSpecs = doc.settings.showSpecs === false; changed(false); break;
     case 'surfaces': doc.settings.showSurfaces = doc.settings.showSurfaces === false; changed(false); break;
     case 'details': checkpoint(); doc.settings.showDetails = !doc.settings.showDetails; changed(); break;
     case 'torseurs': checkpoint(); doc.settings.showTorseurs = !doc.settings.showTorseurs; changed(); break;

@@ -17,10 +17,57 @@ input[type=color] { padding: 0 2px; width: 34px; height: 28px; vertical-align: m
 input:focus, select:focus { outline: 2px solid #8aa8e6; outline-offset: 0; }
 input.invalid { border-color: #d00; background: #fff3f3; }
 
-#toolbar { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 8px; background: #fff; border-bottom: 1px solid #d7dbe3; align-items: center; z-index: 5; }
-.tb-group { display: flex; gap: 3px; align-items: center; padding-right: 6px; border-right: 1px solid #e3e6ec; }
-.tb-group:last-child { border-right: none; }
-.toolbar-label { font-size: 11px; font-weight: 700; color: #596273; white-space: nowrap; padding: 0 3px; }
+#toolbar { display: flex; flex-direction: column; background: #f3f4f7; border-bottom: 1px solid #b9c1cf; z-index: 5; user-select: none; }
+.tb-tabs { display: flex; align-items: flex-end; gap: 10px; height: 34px; padding: 0 8px; background: #e4e8ef; border-bottom: 1px solid #b9c1cf; }
+.tb-tabs .brand { display: inline-flex; align-items: center; gap: 6px; align-self: center; font-size: 13px; font-weight: 700; color: #2b5fd9; white-space: nowrap; margin: 0; }
+.tb-tabs .brand-ic { width: 16px; height: 16px; color: #2b5fd9; }
+.tb-proj { align-self: center; display: inline-flex; align-items: center; gap: 5px; max-width: 220px; padding: 3px 8px; border-color: transparent; background: #fff; color: #1f2430; font-weight: 600; }
+.tb-proj:hover { border-color: #8aa8e6; }
+.tb-proj #projName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tb-proj .ri { width: 16px; height: 16px; }
+.tb-tab-list { display: flex; align-items: flex-end; gap: 2px; align-self: stretch; }
+.tb-right { margin-left: auto; display: flex; align-items: center; gap: 8px; align-self: center; }
+.tb-qat { display: flex; gap: 2px; }
+.tb-qat .rb-b { flex-direction: row; min-width: 0; height: 26px; padding: 2px 6px; gap: 4px; background: transparent; border-color: transparent; }
+.tb-qat .rb-ic { height: auto; }
+.tb-qat .ri { width: 16px; height: 16px; }
+.tb-qat .rb-lb { font-size: 11.5px; max-width: none; }
+#collabState { font-size: 11px; color: #596273; }
+#presence { display: flex; gap: 3px; }
+.tb-tab { white-space: nowrap; border: 1px solid transparent; border-bottom: none; background: transparent; border-radius: 5px 5px 0 0; padding: 5px 14px; font-weight: 600; color: #3a4252; margin-bottom: -1px; }
+.tb-tab:hover { background: #f7f8fb; }
+.tb-tab.active { background: #fff; color: #1f2430; border-color: #b9c1cf; border-top: 2px solid #2b5fd9; padding-top: 4px; }
+.ri { width: 22px; height: 22px; display: block; flex: none; }
+.rb-eye .rb-ic svg { width: 22px; height: 22px; }
+.rb-eye .ic-off { display: none; }
+.rb-eye:not(.active) .ic-eye { display: none; }
+.rb-eye:not(.active) .ic-off { display: flex; }
+.rb-eye.active .ic-eye { display: flex; }
+.rb-st { display: block; font-size: 10.5px; font-weight: 400; opacity: .8; }
+.rb-eye.active { background: #dbe7ff; border-color: #7ea3e6; color: #173f9b; }
+.rb-eye:not(.active) { color: #6b7385; }
+
+/* ===== Ruban (barre d'outils à onglets, style CAO / PowerPoint) ===== */
+.tb-tab { white-space: nowrap; border: 1px solid transparent; border-bottom: none; background: transparent; border-radius: 5px 5px 0 0; padding: 5px 14px; font-weight: 600; color: #3a4252; margin-bottom: -1px; }
+.tb-tab:hover { background: #f7f8fb; }
+.tb-tab.active { background: #fff; color: #1f2430; border-color: #b9c1cf; border-top: 2px solid #2b5fd9; padding-top: 4px; }
+.tb-ribbon { display: flex; align-items: stretch; height: 84px; padding: 4px 6px 0; background: #fff; border-bottom: 1px solid #b9c1cf; overflow-x: auto; overflow-y: hidden; }
+.rb-panel { display: flex; align-items: stretch; }
+.rb-panel[hidden] { display: none; }
+.rb-group { display: flex; flex-direction: column; justify-content: space-between; align-items: center; padding: 0 8px 0 6px; margin-right: 6px; border-right: 1px solid #e1e5ec; min-width: max-content; }
+.rb-group:last-child { border-right: none; }
+.rb-items { display: flex; align-items: center; gap: 2px; flex: 1; }
+.rb-group-name { font-size: 11px; color: #6b7385; padding: 2px 0 1px; white-space: nowrap; }
+.rb-b { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-width: 56px; height: 50px; padding: 4px 6px; border: 1px solid transparent; background: transparent; border-radius: 5px; color: #1f2430; font-size: 11.5px; line-height: 1.15; }
+.rb-b:hover { background: #eef3ff; border-color: #b9cbef; }
+.rb-b.active { background: #dbe7ff; border-color: #7ea3e6; color: #173f9b; }
+.rb-b:active { background: #cfdcf7; }
+.rb-ic { height: 22px; display: flex; align-items: center; justify-content: center; }
+.rb-lb { text-align: center; max-width: 92px; white-space: normal; }
+.rb-b.accent .rb-lb { font-weight: 600; }
+.rb-b.red { color: #d00; } .rb-b.red.active { background: #d00; color: #fff; border-color: #d00; }
+.rb-b.orange { color: #c65e00; } .rb-b.orange.active { background: #c65e00; color: #fff; border-color: #c65e00; }
+.rb-zoom { display: flex; align-items: center; min-width: 48px; justify-content: center; color: #333; font-size: 12px; }
 /* Éditeur des cadres de tolérance (spécifications ISO GPS) */
 .spec-preview svg { display: block; width: 100%; max-width: 260px; height: auto; margin: 2px 0 6px; }
 .spec-cell { border: 1px solid #e1e4eb; border-radius: 8px; padding: 6px 8px; margin: 6px 0; background: #fafbfd; }
@@ -38,7 +85,6 @@ input.invalid { border-color: #d00; background: #fff3f3; }
 .spec-complementary button { text-align: left; }
 .spec-complementary button.active { background: #e8efff; border-color: #2b5fd9; color: #173f9b; }
 .spec-editor .btns { margin-top: 6px; }
-.brand { font-weight: 700; color: #2b5fd9; margin-right: 4px; }
 .tool-icon { width: 20px; height: 20px; vertical-align: middle; pointer-events: none; }
 #zoomLbl { min-width: 42px; text-align: center; color: #555; }
 
@@ -225,16 +271,8 @@ table.set input[type=text] { width: 100%; }
 #projDot { color: #1d7a44; font-size: 9px; margin-left: 4px; vertical-align: 2px; }
 
 /* ===== Partage en direct : présence ===== */
-#presence { display: inline-flex; align-items: center; padding-left: 6px; }
-#presence .peer { width: 24px; height: 24px; border-radius: 50%; background: var(--pc, #2b7de9); color: #fff;
   font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center;
   border: 2px solid #fff; margin-left: -7px; position: relative; box-shadow: 0 0 0 1px #0001; user-select: none; }
-#presence .peer:first-child { margin-left: 0; }
-#presence .peer.me { border-color: #1f2430; }
-#presence .peer .away { position: absolute; right: -1px; bottom: -1px; width: 8px; height: 8px; border-radius: 50%; background: #f0a020; border: 1px solid #fff; }
-#collabState { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; background: #e6f7ec; color: #1d7a44; white-space: nowrap; }
-#collabState[data-state=connecting], #collabState[data-state=retry] { background: #fff4d6; color: #8a6100; }
-#collabState[data-state=error] { background: #fde8e6; color: #b3261e; }
 
 /* ===== Fenêtre Projets ===== */
 .proj { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid #e3e6ec; border-radius: 9px; margin-bottom: 6px; background: #fff; }

@@ -309,7 +309,7 @@ function settingsDialog() {
         <label><input type="checkbox" data-display="showSurfaces" ${st.showSurfaces !== false ? 'checked' : ''}> Afficher les surfaces</label>
         <label><input type="checkbox" data-display="showTorseurs" ${st.showTorseurs ? 'checked' : ''}> Afficher les torseurs</label>
       </div>
-      <div class="btns"><button type="button" data-settings-help>? Aide</button><button type="button" data-settings-github>GitHub ↗</button></div>
+      <div class="btns"><button type="button" data-settings-refauto title="Regroupe, pour chaque pièce, les surfaces liées à une même autre pièce (au moins 2) dans un groupe de surfaces">▣ Créer les références automatiques</button><button type="button" data-settings-help>? Aide</button><button type="button" data-settings-github>GitHub ↗</button></div>
       <p class="muted">Les modifications sont appliquées avec « Valider ».</p>
       <h4>Types de surfaces</h4>
       <table class="set"><tr><th>Code</th><th>Libellé</th><th></th></tr>
@@ -354,6 +354,11 @@ function settingsDialog() {
     if ('addl' in d) { st.liaisonTypes.push({ code: 'XX', label: 'Nouvelle', fields: [], symbol: 'GEN', sA: 'PL', sB: 'PL' }); draw(); }
   });
   draw();
+  b.addEventListener('click', e => {
+    if (e.target.closest('[data-settings-refauto]')) return autoCreateReferences();
+    if (e.target.closest('[data-settings-help]')) return helpDialog();
+    if (e.target.closest('[data-settings-github]')) return window.open('https://github.com/GillesDLT/Graphes-des-contacts', '_blank', 'noopener');
+  });
   const reset = el(`<button>Valeurs par défaut</button>`);
   reset.onclick = () => { Object.assign(st, clone(DEFAULT_SETTINGS), { showDetails: st.showDetails, showSurfaces: st.showSurfaces, showIsoRefs: st.showIsoRefs, showSpecs: st.showSpecs, grid: st.grid }); draw(); };
   openModal({

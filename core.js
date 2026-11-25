@@ -60,6 +60,7 @@ const DEFAULT_SETTINGS = {
   showTorseurs: false,
   showIsoRefs: true,
   showSpecs: true,
+  showHints: true,
   showNominalZero: false,
   grid: true,
   torseurLetters: { X: 'u', L: 'α', Y: 'v', M: 'β', Z: 'w', N: 'γ' },
