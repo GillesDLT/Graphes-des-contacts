@@ -487,21 +487,57 @@ function pickCycleNode(id, ctrl = false) {
   const surfaces = nodeSurfaces(id);
   if (!surfaces.length) return toast('Choisissez une surface ou un groupe de références.');
   if (!closes && surfaces.some(f => f.id === cf.a || f.id === cf.b)) return toast('Une seule CF par cycle : terminez sur son autre surface.');
+  /* Insertion à une position choisie dans l'arborescence du panneau. */
+  if (cycleDraft.insertAt != null) {
+    const k = cycleDraft.insertAt; cycleDraft.insertAt = null;
+    return insertDraftNodeAt(id, k);
+  }
   const append = edge => {
     cycleDraft.nodes.push(id); cycleDraft.edges.push(edge);
     render(); renderProps(); updateTip();
     if (closes) saveCycleDialog();
   };
   if (!cycleDraftComplete()) return chooseStepEdge(cycleDraft.nodes[cycleDraft.nodes.length - 1], id, append);
-  /* Parcours déjà complet (édition) : la nouvelle surface est insérée juste
-     avant la fermeture, et les deux étapes sont recalculées. */
-  const closing = cycleDraft.nodes[cycleDraft.nodes.length - 1], before = cycleDraft.nodes[cycleDraft.nodes.length - 2];
-  chooseStepEdge(before, id, e1 => chooseStepEdge(id, closing, e2 => {
-    cycleDraft.nodes.splice(cycleDraft.nodes.length - 1, 0, id);
-    cycleDraft.edges.splice(cycleDraft.edges.length - 1, 1, e1, e2);
-    render(); renderProps(); updateTip();
-    toast('Étape insérée avant la fermeture du cycle.');
+  /* Parcours déjà complet : la nouvelle surface est insérée juste avant la
+     fermeture, et les deux étapes sont recalculées. */
+  return insertDraftNodeAt(id, cycleDraft.nodes.length - 1);
+}
+/* Inserte une étape à la position k du parcours (k = nombre d'étapes = ajout). */
+function insertDraftNodeAt(id, k) {
+  const d = cycleDraft; if (!d) return;
+  const n = d.nodes.length;
+  if (k <= 0) return toast('La première étape est la surface de départ de la CF.');
+  const finish = () => { render(); renderProps(); updateTip(); toast('Étape insérée à cette position.'); };
+  if (k >= n) return chooseStepEdge(d.nodes[n - 1], id, e => { d.nodes.push(id); d.edges.push(e); finish(); });
+  chooseStepEdge(d.nodes[k - 1], id, e1 => chooseStepEdge(id, d.nodes[k], e2 => {
+    d.nodes.splice(k, 0, id);
+    d.edges.splice(k - 1, 1, e1, e2);
+    finish();
   }));
+}
+/* Recalcule les étapes du parcours pour les paires de nœuds lo…hi. */
+function reconnectDraftEdges(lo, hi, done) {
+  const d = cycleDraft; if (!d) return done && done();
+  const step = j => {
+    if (j > hi || j > d.nodes.length - 2) return done && done();
+    chooseStepEdge(d.nodes[j], d.nodes[j + 1], e => { d.edges[j] = e; step(j + 1); });
+  };
+  step(Math.max(0, lo));
+}
+/* Déplace une étape (↑ ↓) ; les liaisons concernées sont recalculées. */
+function moveDraftNode(i, dir) {
+  const d = cycleDraft; if (!d) return;
+  const j = i + dir, n = d.nodes.length;
+  if (i <= 0 || j <= 0 || i >= n || j >= n) return;
+  const nodes = d.nodes.slice();
+  [nodes[i], nodes[j]] = [nodes[j], nodes[i]];
+  const cf = C(d.cfId);
+  const startOk = cf && (cycleNodeCloses(nodes[0], cf.a) || cycleNodeCloses(nodes[0], cf.b));
+  if (!startOk) return toast('La première étape doit être une surface de la CF de départ.');
+  d.nodes = nodes;
+  reconnectDraftEdges(Math.max(0, Math.min(i, j) - 1), Math.min(n - 2, Math.max(i, j) + 1), () => {
+    render(); renderProps(); updateTip();
+  });
 }
 /* Retire une étape du parcours (sauf la première) ; les voisins sont
    reconnectés automatiquement. */
@@ -569,7 +605,20 @@ function cyclesPanel() {
     ${S().groups.some(g => g.kind === 'fonc' && g.collapsed) ? '<button data-ca="expand">Développer les groupes pour voir toutes les surfaces</button>' : ''}
     ${cycleDraft ? `<h4>${cycleDraft.editId ? 'Modification du parcours' : 'Parcours'} — ${esc(cfDisplayName(C(cycleDraft.cfId)))}</h4>
       <div class="row"><label>Couleur</label><input type="color" data-cycle-draft-color value="${cycleDraft.color || DEFAULT_CYCLE_COLOR}" aria-label="Couleur du cycle en cours"></div>
-      <ol class="help-list cycle-nodes">${cycleDraft.nodes.map((id, i) => `<li>${esc(cycleNodeName(id))}${i ? ` <button data-ca="rmnode" data-i="${i}" class="danger" title="Retirer cette étape">✕</button>` : ' <span class="muted">(départ)</span>'}</li>`).join('')}</ol>
+      <div class="cycle-tree">${cycleDraft.nodes.map((id, i) => {
+        const n = cycleDraft.nodes.length;
+        return `<div class="ct-row${i === 0 ? ' ct-first' : ''}${cycleDraft.insertAt === i + 1 ? ' ct-insert' : ''}">
+          <span class="ct-idx">${i + 1}.</span>
+          <span class="ct-name" title="${esc(cycleNodeName(id))}">${esc(cycleNodeName(id))}</span>
+          <span class="ct-acts">
+            ${i > 0 ? `<button data-ca="up" data-i="${i}" title="Monter cette étape dans le parcours">↑</button>` : ''}
+            ${i < n - 1 ? `<button data-ca="down" data-i="${i}" title="Descendre cette étape dans le parcours">↓</button>` : ''}
+            ${(i < n - 1 || !cycleDraftComplete()) ? `<button data-ca="insafter" data-i="${i}" title="Insérer une étape ici : choisir sa position, puis cliquer la surface sur le graphe">＋</button>` : ''}
+            ${i ? `<button data-ca="rmnode" data-i="${i}" class="danger" title="Supprimer cette étape (les voisins sont reconnectés)">✕</button>` : '<span class="muted" style="font-size:10px">départ</span>'}
+          </span></div>`;
+      }).join('')}
+      ${cycleDraft.insertAt != null ? `<div class="ct-note">Insertion avant l’étape ${cycleDraft.insertAt + 1} : <b>cliquez sur une surface</b> du graphe — <button data-ca="cancelinsert">Annuler l’insertion</button></div>` : ''}
+      </div>
       <div class="btns"><button data-ca="back">↶ Retirer la dernière étape</button><button data-ca="cancel">Annuler le parcours</button>${cycleDraftComplete() ? `<button data-ca="finish" class="primary">${cycleDraft.editId ? '✔ Enregistrer le parcours' : '✔ Valider le cycle'}</button>` : ''}</div>` : ''}
     <h4>Cycles existants (${cs.length})</h4>
     <p class="muted">Sur un élément commun, le dernier cycle affiché est prioritaire ; les cycles multiples sur un même lien sont tracés côte à côte.</p>
@@ -583,7 +632,18 @@ function cyclesPanel() {
 }
 function cycleAction(action, id, btn) {
   const c = CY(id);
-  if (action === 'rmnode') return cycleDraftRemove(Number(btn?.dataset?.i));
+  const di = () => Number(btn?.dataset?.i);
+  if (action === 'rmnode') return cycleDraftRemove(di());
+  if (action === 'insafter') {
+    if (!cycleDraft) return;
+    const k = di() + 1;
+    cycleDraft.insertAt = cycleDraft.insertAt === k ? null : k;
+    render(); renderProps(); updateTip();
+    return;
+  }
+  if (action === 'cancelinsert') { if (cycleDraft) cycleDraft.insertAt = null; render(); renderProps(); updateTip(); return; }
+  if (action === 'up') return moveDraftNode(di(), -1);
+  if (action === 'down') return moveDraftNode(di(), 1);
   if (action === 'back') {
     if (cycleDraft) { cycleDraft.nodes.pop(); cycleDraft.edges.pop(); if (!cycleDraft.nodes.length) cycleDraft = null; }
     render(); renderProps(); updateTip(); return;

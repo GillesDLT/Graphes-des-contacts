@@ -278,11 +278,13 @@ affichage noir ou couleur.
 
 Le panneau **Cycles** permet de changer les couleurs, d’afficher ou de masquer
 les cycles, de les extraire dans des feuilles indépendantes et de **modifier le
-parcours** d’un cycle existant (« Modifier le parcours… » : retirer une étape
-avec ✕, en insérer une nouvelle avant la fermeture, reconnecter, puis valider).
-Lorsqu’un élément est partagé, le dernier cycle affiché est prioritaire ;
-plusieurs cycles sur un même lien sont tracés **côte à côte** ; l’ordre est
-indiqué dans le panneau.
+parcours** d’un cycle existant (« Modifier le parcours… »). Le parcours est
+édité dans une **arborescence** : monter ou descendre une étape (↑ ↓, les
+liaisons sont recalculées), en **insérer une à la position voulue** (＋ puis
+cliquer la surface sur le graphe), en supprimer une (✕, les voisins sont
+reconnectés). Lorsqu’un élément est partagé, le dernier cycle affiché est
+prioritaire ; plusieurs cycles sur un même lien sont tracés **côte à côte** ;
+l’ordre est indiqué dans le panneau.
 
 ## ISO GPS : références et spécifications
 
@@ -359,10 +361,10 @@ Pendant la création d’un cycle, **Ctrl+clic sur la dernière étape**,
 couleur du parcours se règle dès le début dans la barre du haut.
 
 Sur **tablette ou tactile** : pincer avec deux doigts pour zoomer, glisser pour
-déplacer la vue. Le chevron **⌃** de la barre du haut réduit la barre d’outils,
-et le panneau de droite se cache (**⟩**, réaffiché par **☰**) ou passe en
-flottant (**⇱**). Un **double-clic sur une pièce** ouvre son éditeur flottant.
-Les boutons **Pièces** et **Surfaces** de l’accueil verrouillent les positions.
+déplacer la vue. Le chevron **⌃** de la barre du haut réduit la barre d’outils
+et le bouton **◧** affiche / cache le panneau de droite. Un **double-clic sur
+une pièce** ouvre son éditeur flottant, centré à l’écran. Les boutons
+**Pièces** et **Surfaces** de l’accueil verrouillent les positions.
 
 ## Sauvegarder son travail et le partager
 

@@ -347,7 +347,11 @@ function cycleCurveCtrl(start, end, bend, cps, auto) {
 }
 function cycleCurvePath(cycle, key, ctrl, extraAttrs, title) {
   const draft = cycle === cycleDraft;
-  return `<path data-cycle-bend="${cycle.id || 'draft'}" data-cycle-key="${key}" ${extraAttrs} d="${cubicPath(ctrl)}" fill="none" stroke="${cycle.color || DEFAULT_CYCLE_COLOR}" stroke-width="${draft ? CYCLE_SW_DRAFT : CYCLE_SW}" stroke-dasharray="${draft ? '12 7' : '6 4'}" stroke-linecap="round" pointer-events="stroke" style="cursor:move"><title>${title}</title></path>`;
+  const d = cubicPath(ctrl), tag = `data-cycle-bend="${cycle.id || 'draft'}" data-cycle-key="${key}" ${extraAttrs}`;
+  /* Une zone de clic large sous le trait visible : la courbe reste
+     sélectionnable et déplaçable même en trait fin. */
+  return `<path ${tag} d="${d}" fill="none" stroke="transparent" stroke-width="12" pointer-events="stroke" style="cursor:move"><title>${title}</title></path>` +
+    `<path ${tag} d="${d}" fill="none" stroke="${cycle.color || DEFAULT_CYCLE_COLOR}" stroke-width="${draft ? CYCLE_SW_DRAFT : CYCLE_SW}" stroke-dasharray="${draft ? '12 7' : '6 4'}" stroke-linecap="round" pointer-events="none"/>`;
 }
 function cycleInternalSVG(cycles) {
   cycleCurveChords.clear();
@@ -514,11 +518,14 @@ function renderOverlay() {
   if (sel.size === 1 && tool === 'select') {
     const id = [...sel][0], l = L(id) || C(id);
     if (l?.curved && liaisonVisible(l)) {
-      const g = linkGeom(l), p = { x: g.cx, y: g.cy };
+      const g = linkGeom(l), p = { x: g.cx, y: g.cy }, chs = 7 / k, hit = 12 / k;
       o += `<line x1="${r1((g.ax + g.bx) / 2)}" y1="${r1((g.ay + g.by) / 2)}" x2="${r1(p.x)}" y2="${r1(p.y)}" stroke="${blue}" stroke-width="${sw}" stroke-dasharray="4 3" pointer-events="none"/>` +
-        `<circle data-bend-id="${id}" cx="${r1(p.x)}" cy="${r1(p.y)}" r="${7 / k}" fill="white" stroke="${blue}" stroke-width="${2 / k}"><title>Glisser pour cintrer le lien (forme simple)</title></circle>`;
+        `<line x1="${r1(g.ctrl[0].x)}" y1="${r1(g.ctrl[0].y)}" x2="${r1(g.c1.x)}" y2="${r1(g.c1.y)}" stroke="${blue}" stroke-opacity="0.55" stroke-width="${sw}" stroke-dasharray="3 3" pointer-events="none"/>` +
+        `<line x1="${r1(g.ctrl[3].x)}" y1="${r1(g.ctrl[3].y)}" x2="${r1(g.c2.x)}" y2="${r1(g.c2.y)}" stroke="${blue}" stroke-opacity="0.55" stroke-width="${sw}" stroke-dasharray="3 3" pointer-events="none"/>` +
+        `<circle data-bend-id="${id}" cx="${r1(p.x)}" cy="${r1(p.y)}" r="${8 / k}" fill="white" stroke="${blue}" stroke-width="${2 / k}"><title>Glisser pour cintrer le lien (forme simple)</title></circle>`;
       [g.c1, g.c2].forEach((cp, ci) => {
-        o += `<rect data-cp-id="${id}" data-cp-i="${ci}" x="${r1(cp.x - hs)}" y="${r1(cp.y - hs)}" width="${2 * hs}" height="${2 * hs}" fill="#fff" stroke="${blue}" stroke-width="${sw}"><title>Poignée Bézier : glisser pour sculpter librement la courbe</title></rect>`;
+        o += `<rect data-cp-id="${id}" data-cp-i="${ci}" x="${r1(cp.x - hit)}" y="${r1(cp.y - hit)}" width="${2 * hit}" height="${2 * hit}" fill="transparent"/>` +
+          `<rect data-cp-id="${id}" data-cp-i="${ci}" x="${r1(cp.x - chs)}" y="${r1(cp.y - chs)}" width="${2 * chs}" height="${2 * chs}" fill="#fff" stroke="${blue}" stroke-width="${2 / k}"><title>Poignée Bézier : glisser pour sculpter librement la courbe</title></rect>`;
       });
     }
     const p = P([...sel][0]);
@@ -556,8 +563,12 @@ function renderOverlay() {
   for (const cyc of handleCycles) {
     for (const chord of cycleCurveChords.values()) {
       if (chord.cycle !== cyc) continue;
+      const chs = 7 / k, hit = 12 / k, tag = `data-cycle-bend="${cyc.id || 'draft'}" data-cycle-key="${chord.key}"${chord.edge != null ? ` data-cycle-edge="${chord.edge}"` : ''}`;
+      o += `<line x1="${r1(chord.ctrl[0].x)}" y1="${r1(chord.ctrl[0].y)}" x2="${r1(chord.ctrl[1].x)}" y2="${r1(chord.ctrl[1].y)}" stroke="${blue}" stroke-opacity="0.55" stroke-width="${sw}" stroke-dasharray="3 3" pointer-events="none"/>` +
+        `<line x1="${r1(chord.ctrl[3].x)}" y1="${r1(chord.ctrl[3].y)}" x2="${r1(chord.ctrl[2].x)}" y2="${r1(chord.ctrl[2].y)}" stroke="${blue}" stroke-opacity="0.55" stroke-width="${sw}" stroke-dasharray="3 3" pointer-events="none"/>`;
       chord.ctrl.slice(1, 3).forEach((cp, ci) => {
-        o += `<rect data-cycle-bend="${cyc.id || 'draft'}" data-cycle-key="${chord.key}" data-cp-i="${ci}"${chord.edge != null ? ` data-cycle-edge="${chord.edge}"` : ''} x="${r1(cp.x - hs)}" y="${r1(cp.y - hs)}" width="${2 * hs}" height="${2 * hs}" fill="#fff" stroke="${blue}" stroke-width="${sw}"><title>Poignée Bézier : glisser pour sculpter librement la courbe du cycle</title></rect>`;
+        o += `<rect ${tag} data-cp-i="${ci}" x="${r1(cp.x - hit)}" y="${r1(cp.y - hit)}" width="${2 * hit}" height="${2 * hit}" fill="transparent"/>` +
+          `<rect ${tag} data-cp-i="${ci}" x="${r1(cp.x - chs)}" y="${r1(cp.y - chs)}" width="${2 * chs}" height="${2 * chs}" fill="#fff" stroke="${blue}" stroke-width="${2 / k}"><title>Poignée Bézier : glisser pour sculpter librement la courbe du cycle</title></rect>`;
       });
     }
   }
@@ -585,9 +596,9 @@ function renderPickbar() {
   if (tool === 'cycle') {
     const d = cycleDraft;
     const html = d
-      ? `<span><b>Cycle</b> : ${esc(cfDisplayName(C(d.cfId)))} · <span class="cnt">${d.nodes.length} nœud(s)</span>${d.editId ? ' · modification' : ''} — cliquer pour insérer / retirer des étapes</span>
+      ? `<span><b>Cycle</b> : ${esc(cfDisplayName(C(d.cfId)))} · <span class="cnt">${d.nodes.length} nœud(s)</span>${d.editId ? ' · modification' : ''}${d.insertAt != null ? ` — <b>insérer avant l’étape ${d.insertAt + 1} : cliquez une surface</b>` : ' — cliquer pour ajouter une étape'}</span>
         <label class="pb-color">Couleur <input type="color" data-cycle-draft-color aria-label="Couleur du cycle"></label>
-        <button data-ca="back" title="Retirer la dernière étape">↶ Retirer</button><button data-ca="cancel">Annuler</button>${cycleDraftComplete() ? `<button class="primary" data-ca="finish">✔ ${d.editId ? 'Enregistrer' : 'Valider'} <span class="kbd" style="color:#333">Entrée</span></button>` : ''}`
+        ${d.insertAt != null ? '<button data-ca="cancelinsert">Annuler l’insertion</button>' : '<button data-ca="back" title="Retirer la dernière étape">↶ Retirer</button><button data-ca="cancel">Annuler</button>'}${cycleDraftComplete() ? `<button class="primary" data-ca="finish">✔ ${d.editId ? 'Enregistrer' : 'Valider'} <span class="kbd" style="color:#333">Entrée</span></button>` : ''}`
       : `<span><b>Cycle</b> : cliquer sur une <b>surface de CF</b> pour commencer le parcours (gras pendant la création)</span>`;
     if (pb.dataset.h !== html) { pb.innerHTML = html; pb.dataset.h = html; }
     const inp = pb.querySelector('[data-cycle-draft-color]');

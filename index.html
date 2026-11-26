@@ -21,6 +21,7 @@
       <span id="collabState" hidden></span>
       <div id="presence"></div>
       <div class="tb-qat"><button data-act="undo" title="Annuler — Ctrl+Z" class="rb-b"><span class="rb-ic"><svg class="ri" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg></span><span class="rb-lb">Annuler</span></button><button data-act="redo" title="Rétablir — Ctrl+Y" class="rb-b"><span class="rb-ic"><svg class="ri" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m15 14 5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/></svg></span><span class="rb-lb">Rétablir</span></button><button data-act="save" title="Enregistrer (.json) — Ctrl+S" class="rb-b"><span class="rb-ic"><svg class="ri" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 3v5h8V3"/><rect x="7" y="13" width="10" height="8"/></svg></span><span class="rb-lb">Enregistrer</span></button></div>
+      <button id="propsToggle" title="Afficher ou cacher le panneau de propriétés" aria-pressed="true">◧</button>
       <button id="ribbonToggle" title="Réduire la barre d’outils (plus grand écran)" aria-expanded="true">⌃</button>
     </div>
   </div>
@@ -92,13 +93,8 @@
       <button id="referenceImageResize" aria-label="Redimensionner l’image de référence" title="Glisser pour redimensionner ; flèches au clavier">↘</button>
     </section>
   </div>
-  <div id="propsBar">
-    <button id="propsHide" title="Cacher le panneau de propriétés">⟩</button>
-    <button id="propsFloat" title="Panneau flottant au-dessus du dessin">⇱</button>
-  </div>
   <aside id="props"></aside>
 </main>
-<button id="propsShow" title="Réafficher le panneau de propriétés">☰</button>
 <footer id="tabs"></footer>
 <div id="modal-root"></div>
 <input type="file" id="fileInput" accept=".json,application/json" hidden>

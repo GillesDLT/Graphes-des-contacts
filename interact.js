@@ -221,6 +221,16 @@ svg.addEventListener('pointerdown', e => {
     if(sp&&t) drag={type:'specBend',target:t,start:pt,snap:snapshot(),moved:false};
     return;
   }
+  /* Courbes de cycle : déplaçables dans tous les outils ; un clic sans glisser
+     sélectionne le cycle (poignées Bézier et panneau). */
+  if (h && h.kind === 'cycleBend') {
+    const cycle = h.id === 'draft' ? cycleDraft : CY(h.id);
+    const key = h.key != null ? h.key : 'free:' + h.edge;
+    const geom = cycleCurveChords.get((cycle?.id || 'draft') + '|' + key);
+    if (!cycle || !geom) return;
+    drag = { type: h.cp != null ? 'cycleCp' : 'cycleBend', cycle, key, cp: h.cp, edge: h.edge != null && h.edge !== '' ? Number(h.edge) : null, geom, start: pt, snap: snapshot(), moved: false };
+    return;
+  }
   if (tool === 'isoRef') {
     const target = isoComponentFromHit(h);
     if (!target) return toast('Cliquez sur une surface ou un groupe de surfaces de référence.');
@@ -371,14 +381,6 @@ svg.addEventListener('pointerdown', e => {
   }
   if (h && h.kind === 'curveCp') {
     drag = { type: 'curveCp', l: L(h.id) || C(h.id), index: h.cp, start: pt, snap: snapshot(), moved: false };
-    return;
-  }
-  if (h && h.kind === 'cycleBend') {
-    const cycle = h.id === 'draft' ? cycleDraft : CY(h.id);
-    const key = h.key != null ? h.key : 'free:' + h.edge;
-    const geom = cycleCurveChords.get((cycle?.id || 'draft') + '|' + key);
-    if (!cycle || !geom) return;
-    drag = { type: h.cp != null ? 'cycleCp' : 'cycleBend', cycle, key, cp: h.cp, edge: h.edge != null && h.edge !== '' ? Number(h.edge) : null, geom, start: pt, snap: snapshot(), moved: false };
     return;
   }
   if (h && h.kind === 'gtoggle') { toggleCollapse(G(h.id)); return; }
@@ -1119,22 +1121,24 @@ const uiPrefs = (() => { try { return JSON.parse(localStorage.getItem(UI_KEY) ||
 function saveUiPrefs() { try { localStorage.setItem(UI_KEY, JSON.stringify(uiPrefs)); } catch {} }
 function applyUiPrefs() {
   document.body.classList.toggle('ribbon-collapsed', !!uiPrefs.ribbonCollapsed);
-  document.body.classList.toggle('props-hidden', uiPrefs.propsMode === 'hidden');
-  document.body.classList.toggle('props-float', uiPrefs.propsMode === 'float');
+  if (uiPrefs.propsMode === 'float') uiPrefs.propsMode = 'docked'; // mode flottant retiré
+  const hidden = uiPrefs.propsMode === 'hidden';
+  document.body.classList.toggle('props-hidden', hidden);
   const chev = $('#ribbonToggle');
   if (chev) {
     chev.textContent = uiPrefs.ribbonCollapsed ? '⌄' : '⌃';
     chev.title = (uiPrefs.ribbonCollapsed ? 'Afficher' : 'Réduire') + ' la barre d’outils (plus grand écran)';
     chev.setAttribute('aria-expanded', String(!uiPrefs.ribbonCollapsed));
   }
-  const fh = $('#propsHide'), ff = $('#propsFloat');
-  if (fh) fh.classList.toggle('active', uiPrefs.propsMode === 'hidden');
-  if (ff) ff.classList.toggle('active', uiPrefs.propsMode === 'float');
+  const pt = $('#propsToggle');
+  if (pt) {
+    pt.classList.toggle('active', !hidden);
+    pt.setAttribute('aria-pressed', String(!hidden));
+    pt.title = (hidden ? 'Afficher' : 'Cacher') + ' le panneau de propriétés';
+  }
 }
 $('#ribbonToggle').addEventListener('click', () => { uiPrefs.ribbonCollapsed = !uiPrefs.ribbonCollapsed; saveUiPrefs(); applyUiPrefs(); render(); });
-$('#propsHide').addEventListener('click', () => { uiPrefs.propsMode = uiPrefs.propsMode === 'hidden' ? 'docked' : 'hidden'; saveUiPrefs(); applyUiPrefs(); });
-$('#propsFloat').addEventListener('click', () => { uiPrefs.propsMode = uiPrefs.propsMode === 'float' ? 'docked' : 'float'; saveUiPrefs(); applyUiPrefs(); });
-$('#propsShow').addEventListener('click', () => { uiPrefs.propsMode = 'docked'; saveUiPrefs(); applyUiPrefs(); });
+$('#propsToggle').addEventListener('click', () => { uiPrefs.propsMode = uiPrefs.propsMode === 'hidden' ? 'docked' : 'hidden'; saveUiPrefs(); applyUiPrefs(); render(); });
 
 /* ===== Démarrage ===== */
 $('#curColor').addEventListener('input', () => { if (tool !== 'paint') setTool('paint'); });
