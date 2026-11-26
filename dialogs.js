@@ -373,6 +373,113 @@ function settingsDialog() {
   });
 }
 
+/* ===== Partage par lien : le JSON voyage dans l'URL (compressé) ===== */
+function b64urlEncode(bytes) {
+  let s = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function b64urlDecode(str) {
+  const b64 = str.replace(/-/g, '+').replace(/_/g, '/');
+  const bin = atob(b64 + '='.repeat((4 - b64.length % 4) % 4));
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+async function packShareDoc() {
+  const bytes = new TextEncoder().encode(JSON.stringify(doc));
+  if (typeof CompressionStream === 'undefined') return 'r' + b64urlEncode(bytes);
+  const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+  return 'z' + b64urlEncode(new Uint8Array(await new Response(stream).arrayBuffer()));
+}
+async function unpackShareDoc(payload) {
+  const kind = payload[0], bytes = b64urlDecode(payload.slice(1));
+  let text;
+  if (kind === 'z') {
+    if (typeof DecompressionStream === 'undefined') throw new Error('navigateur trop ancien pour décompresser ce lien');
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+    text = await new Response(stream).text();
+  } else text = new TextDecoder().decode(bytes);
+  return JSON.parse(text);
+}
+async function shareLinkDialog() {
+  let link;
+  try { link = location.href.split('#')[0] + '#d=' + await packShareDoc(); }
+  catch (e) { return toast('Lien impossible : ' + (e?.message || e)); }
+  const b = el(`<div><p>Le graphe complet est <b>dans le lien</b> : celui qui l’ouvre reçoit une copie dans un nouveau projet, sans serveur.</p>
+    <div class="row"><input id="shLink" type="text" readonly value="${esc(link)}" style="width:100%"></div>
+    <div class="btns"><button id="shCopy" class="primary">Copier le lien</button></div>
+    <p class="muted">${Math.round(link.length / 1024)} Ko de lien${link.length > 30000 ? ' — très long : les messageries peuvent le tronquer, préférez le fichier .json au-delà' : ''}. Il reflète l’état du projet au moment du clic.</p></div>`);
+  openModal({ title: '🔗 Partager par lien', body: b, okText: 'Fermer', noCancel: true, onOk: () => {} });
+  $('#shLink', b).onclick = e => e.target.select();
+  $('#shCopy', b).onclick = async () => {
+    const input = $('#shLink', b);
+    try { await navigator.clipboard.writeText(input.value); toast('Lien copié dans le presse-papier'); }
+    catch (e) { input.select(); toast('Copie impossible : sélection manuelle (Ctrl+C)'); }
+  };
+}
+/* Ouvre le document porté par un lien #d=… dans un nouveau projet. */
+async function importSharedDoc() {
+  const m = location.hash.match(/^#d=([A-Za-z0-9_-]+)$/);
+  if (!m) return false;
+  try {
+    const o = await unpackShareDoc(m[1]);
+    Projects.importDoc(o, (o.sheets && o.sheets[0] && o.sheets[0].name) || 'Graphe partagé');
+    renderProjectBadge();
+    toast('Graphe importé depuis le lien de partage (nouveau projet).');
+    return true;
+  } catch (e) {
+    toast('Lien de partage illisible : ' + (e?.message || e));
+    return false;
+  } finally {
+    /* window.history : le nom `history` est pris par l’historique annuler. */
+    try { window.history.replaceState(null, '', location.pathname + location.search); } catch {}
+  }
+}
+
+/* ===== Éditeur flottant d'une pièce (double-clic sur la pièce) ===== */
+let piecePopupEl = null, piecePopupId = null;
+function closePiecePopup() { if (piecePopupEl) { piecePopupEl.remove(); piecePopupEl = null; piecePopupId = null; } }
+function pieceEditPopup(p) {
+  if (!p) return;
+  if (piecePopupEl && piecePopupId === p.id) { piecePopupEl.style.zIndex = '30'; return; }
+  closePiecePopup();
+  piecePopupId = p.id;
+  const w = el(`<div class="popup piece-edit" role="dialog" aria-label="Éditer la pièce">
+    <div class="ttl"><b>Éditer la pièce</b><button class="xbtn" title="Fermer (Échap)">✕</button></div>
+    <div class="pe-body"></div></div>`);
+  const draw = () => {
+    const pp = P(piecePopupId);
+    if (!pp) return closePiecePopup();
+    const body = $('.pe-body', w);
+    body.innerHTML = piecePanel(pp);
+    wireProps(body, pp);
+    $$('input[type=color][data-k]', body).forEach(i => i.value = rgbToHex(pp[i.dataset.k]) || '#000000');
+  };
+  w._draw = draw;
+  draw();
+  $('.xbtn', w).onclick = closePiecePopup;
+  document.body.appendChild(w);
+  piecePopupEl = w; w._keep = true;
+  w.style.right = '18px';
+  w.style.top = Math.max(60, Math.round(window.innerHeight * 0.14)) + 'px';
+  /* Glisser le titre pour déplacer la fenêtre. */
+  $('.ttl', w).addEventListener('pointerdown', e => {
+    if (e.target.closest('button')) return;
+    e.preventDefault();
+    const r = w.getBoundingClientRect(), ox = e.clientX - r.left, oy = e.clientY - r.top;
+    const move = ev => {
+      w.style.right = 'auto';
+      w.style.left = clampN(ev.clientX - ox, 0, window.innerWidth - r.width) + 'px';
+      w.style.top = clampN(ev.clientY - oy, 0, window.innerHeight - r.height) + 'px';
+    };
+    const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  });
+}
+function refreshPiecePopup() { if (piecePopupEl && piecePopupEl._draw) piecePopupEl._draw(); }
+
 /* ===== Aide ===== */
 function helpDialog() {
   const k = s => `<span class="kbd">${s}</span>`;
@@ -382,7 +489,7 @@ function helpDialog() {
       <li>${k('P')} <b>Nouvelle pièce</b> : nom unique, numéro (pour la nomenclature des surfaces), couleur. Avec Déplacer, double-clic sur le fond = pièce à cet endroit. Poignées bleues = étirer horizontalement / verticalement (Maj = proportionnel). Le bouton <b>◯ Cercle parfait</b> du panneau de la pièce la rend circulaire en un clic. Le <b>nom accepte les retours à la ligne</b> (champ multi-lignes à la création et dans le panneau) ; il se déplace librement en le <b>glissant</b>, et un <b>double-clic sur le nom</b> ou le bouton <b>Recentre le nom</b> le remet au centre de la pièce.</li>
       <li>Les surfaces se placent <b>automatiquement</b> le long du bord, orientées vers la pièce liée, pour limiter les croisements de liaisons. Avec Déplacer, glisser une surface la fait coulisser le long du bord et la fige ; décocher/cocher « Placement automatique » dans le panneau pour la libérer. Le type <b>SC — Surface complexe</b> remplace Came (les anciens types CA sont convertis à l'ouverture).</li>
       <li><b>Surfaces</b> : créées avec une liaison de contact, une CF, ou seules avec l'outil <b>◦ Surface libre</b> (<b>U</b> : clic sur une pièce) ou le bouton <b>◦ Surface libre</b> du panneau de la pièce — une bulle isolée, sans liaison ni CF, conservée telle quelle. Une surface libre se relie ensuite en la choisissant comme <b>surface existante</b> dans une liaison ou une CF. Nomenclature automatique <i>TYPE.n°pièce.n°surface</i> (ex. PL.1.1). <b>Nom libre</b> : chaque surface peut afficher le texte de votre choix à la place — champ à la création dans les fenêtres de liaison / CF, <b>double-clic sur la bulle</b>, ou champ <b>Nom libre</b> du panneau. Laisser vide conserve la nomenclature automatique ; le bouton <b>↺ Nom automatique</b> du panneau efface le nom libre. L’option <b>Surfaces</b> dans Paramètres masque ou réaffiche leurs symboles et noms sans masquer les liaisons ; les marqueurs sont dessinés derrière les liaisons. Supprimer une surface ou son lien supprime le lien <b>et</b> ses deux surfaces dès qu'elles ne sont plus reliées à rien — y compris une surface libre (une surface encore utilisée par une autre liaison ou une CF est conservée).</li>
-      <li>${k('L')} <b>Nouvelle liaison</b> : ${k('Ctrl')}+clic sur 2 pièces → fenêtre de création (type, répétition, surfaces, noms libres facultatifs, détails, schéma). Si 2 pièces sont déjà sélectionnées, ${k('L')} ouvre directement la fenêtre. Double-clic sur une pièce = démarrer une liaison depuis elle ; double-clic sur une liaison = modifier. Après validation, l'outil revient sur Déplacer.</li>
+      <li>${k('L')} <b>Nouvelle liaison</b> : ${k('Ctrl')}+clic sur 2 pièces → fenêtre de création (type, répétition, surfaces, noms libres facultatifs, détails, schéma). Si 2 pièces sont déjà sélectionnées, ${k('L')} ouvre directement la fenêtre. Double-clic sur une pièce = ouvrir son <b>éditeur flottant</b> ; double-clic sur une liaison = modifier. Après validation, l'outil revient sur Déplacer.</li>
       <li>${k('R')} <b>Répétition</b> : ${k('Ctrl')}+clic sur les pièces répétées, puis ${k('Entrée')}. La zone est plus proche des pièces qu'un groupe fonctionnel et inclut les contacts extérieurs. Cliquer sur une surface de CF pour inclure / retirer la <b>CF entière et ses deux surfaces</b> ; les CF sont exclues par défaut. « Modifier les membres » permet de changer ce choix. « ×2 » par défaut ; glisser le nom pour le déplacer, double-clic pour revenir au placement automatique.</li>
       <li>Quand un groupe fonctionnel est réduit, les répétitions purement internes sont masquées. Si une répétition a un contact extérieur (ou une CF extérieure incluse), son contour suit seulement les <b>surfaces et les liaisons concernées</b>, y compris leurs arcs : il n'englobe pas la bulle fonctionnelle entière. Développer le groupe restitue la répétition complète.</li>
       <li>${k('G')} <b>Groupe fonctionnel</b> : ${k('Ctrl')}+clic sur les pièces, puis ${k('Entrée')}. Bouton <b>−</b> en haut du groupe (ou double-clic) : le groupe se <b>réduit en une seule ellipse</b> (pièces et liaisons internes masquées, seules les surfaces en contact avec l'extérieur restent) ; bouton <b>+</b> pour le développer. Une fois réduite, sélectionnez l’ellipse et faites glisser ses poignées bleues pour modifier sa largeur / hauteur (Maj au coin pour garder les proportions).</li>
@@ -393,27 +500,31 @@ function helpDialog() {
       <li><b>Titres de répétition dans un groupe fonctionnel</b> : avec l'outil Fonctionnel ou « Modifier les membres », choisir les pièces, puis cliquer sur un titre de répétition visible pour l'inclure / le retirer. Le contour s'étend autour du titre, sans ajouter automatiquement les pièces de la répétition aux membres. Le choix est facultatif et conservé dans le JSON. Si la répétition est masquée dans un groupe réduit, son titre n'est pas dessiné.</li>
       <li>${k('N')} <b>Note</b> : choisir l’outil puis cliquer sur le graphe pour ajouter un commentaire. Les notes se déplacent avec Déplacer, se modifient par double-clic et sont conservées dans le JSON.</li>
       <li><b>ISO GPS</b> : le bouton ouvre une boîte flottante avec les outils <b>Réf. ISO</b> et <b>Spécification</b>, et les bascules pour masquer / afficher leurs symboles (utile avant export). <b>Réf. ISO</b> : cliquer sur une surface ou un groupe de surfaces d’une seule pièce ; l’indicateur suit la pièce. Le panneau de droite propose l’élément de référence carré ou la référence partielle (cercle coupé en deux), le texte, l’extrémité du rappel et un bouton de marqueur de coude (aucun, cercle ou deux cercles concentriques). Les lettrages utilisent la police technique ISO 3098 (osifont).</li>
-      <li><b>Spécification</b> (${k('S')}) : cadre de tolérance ISO 1101. Cliquer sur une ou plusieurs surfaces ou groupes de surfaces appartenant à la même pièce, puis ${k('Entrée')} crée un cadre lié à ces composants. Il suit leur pièce, et les clics sur une autre pièce sont refusés. Chaque <b>section</b> reçoit un symbole de caractéristique choisi dans une liste (droiture, planéité, position…), une indication adjacente (symbole Ø facultatif, texte, tolérance ± ou +/− en exposant/indice, ou classe comme E6). Les sections se déplacent, se suppriment et s’ajoutent ; les indications adjacentes non encadrées se placent au-dessus à gauche du cadre (une répétition de 1 n’affiche pas « 1x »). Les quatre indications complémentaires ajoutent une cellule avec symbole (symétrie, parallélisme, perpendicularité ou angle), texte, et leur marqueur distinctif (triangle, flèche ou cercle). Chaque coude peut recevoir un cercle ou deux cercles concentriques ; double-clic sur le cadre pour l’éditer. Le texte au-dessus du cadre reçoit aussi des indicateurs ajoutés après la cote : le (E) en un clic et des lettres libres (« SX »…) encadrées d’un oblong, ou d’un cercle pour une lettre unique. Le bouton « 👁 Cacher le cadre », à côté du titre « Sections du cadre », masque le cadre et ses indications complémentaires : le texte reste, souligné, et les liens partent du soulignement. Sur le cadre, chaque lien arrive perpendiculairement à l’arête (vertical depuis le dessous, horizontal depuis le côté).</li>
+      <li><b>Spécification</b> (${k('S')}) : cadre de tolérance ISO 1101. Cliquer sur une ou plusieurs surfaces ou groupes de surfaces appartenant à la même pièce, puis ${k('Entrée')} crée un cadre lié à ces composants. Il suit leur pièce, et les clics sur une autre pièce sont refusés. Chaque <b>section</b> reçoit un symbole de caractéristique choisi dans une liste (rectitude, planéité, position…), une indication adjacente (symbole Ø facultatif, texte, tolérance ± ou +/− en exposant/indice, ou classe comme E6). Les sections se déplacent, se suppriment et s’ajoutent ; les indications adjacentes non encadrées se placent au-dessus à gauche du cadre (une répétition de 1 n’affiche pas « 1x »). Les quatre indications complémentaires ajoutent une cellule avec symbole (symétrie, parallélisme, perpendicularité ou angle), texte, et leur marqueur distinctif (triangle, flèche ou cercle). Chaque coude peut recevoir un cercle ou deux cercles concentriques ; double-clic sur le cadre pour l’éditer. Le texte au-dessus du cadre reçoit aussi des indicateurs ajoutés après la cote : le (E) en un clic et des lettres libres (« SX »…) encadrées d’un oblong, ou d’un cercle pour une lettre unique. Le bouton « 👁 Cacher le cadre », à côté du titre « Sections du cadre », masque le cadre et ses indications complémentaires : le texte reste, souligné, et les liens partent du soulignement. Sur le cadre, chaque lien arrive perpendiculairement à l’arête (vertical depuis le dessous, horizontal depuis le côté).</li>
       <li><b>Nominal 0</b> : affiche / cache les bulles <i>n°pièce.0</i> reliées aux surfaces (contacts et CF). Glisser une bulle pour la déplacer à l'intérieur de sa pièce ; elle suit ensuite la pièce. Double-clic sur la bulle, ou bouton de réinitialisation dans le panneau de la pièce, pour revenir à la position initiale. La position reste conservée après enregistrement et copie. Les pièces masquées n'affichent pas de nominal.</li>
       <li>${k('C')} <b>CF</b> : clic sur deux pièces différentes — ou directement sur deux surfaces ou deux groupes de référence, une extrémité par pièce — puis fenêtre de création comme pour les liaisons : les <b>couleurs des deux pièces</b> sont affichées, un nom libre (texte, nombre ou vide), et pour chaque extrémité une <b>surface existante</b> de la pièce, une nouvelle surface (type + répétitions + nom libre facultatif) ou un <b>groupe de référence</b> dont le trait s'accroche au contour. Un <b>point</b> et une <b>normale</b> facultatifs (x, y, z ou direction personnalisée du type u_123) peuvent être ajoutés ; ils s'affichent avec le détail des liaisons. Le nom doit être unique dans la feuille, sans distinction de casse ou d'espaces extérieurs ; une seule CF sans nom est autorisée. Les anciens noms CF1, CF2… sont conservés à l'ouverture. Une surface existante peut être partagée avec une liaison et avec plusieurs CF (par exemple PL.1.1 — CF1 — PL.2.1 — CF2 — PL.3.1 : une même surface entre deux CF successives, dont l'anneau est alors divisé en autant de couleurs) ; supprimer la CF ou une de ses surfaces supprime aussi ce qui devient inutile. L'option <b>Encadrer le libellé sur le trait</b> est disponible à la création et dans le panneau de la CF ; un nom vide n'affiche aucun texte ni cadre.</li>
       <li><b>Torseurs</b> : l’option <b>Torseurs</b> dans Paramètres affiche / masque, sous chaque liaison, son torseur des actions transmissibles {u α ; v β ; w γ}<sub>A</sub> (sans le préfixe {T<sub>n1/n2</sub>}<sub>A</sub> =). Chaque CF affiche aussi son torseur, complet (six composantes), à côté de ceux des liaisons. Les lignes sont les axes x, y, z ; la colonne 1 donne les efforts / translations et la colonne 2 les moments / rotations. La <b>notation est configurable dans Paramètres</b> (par défaut u v w et α β γ ; saisir X Y Z et L M N pour la notation classique). Les valeurs par défaut suivent le type de liaison et son axe / normale choisis (avec la notation par défaut : Pivot sur x → α = 0, Glissière sur x → u = 0, Appui plan de normale z → w = γ = 0, Rotule → α = β = γ = 0, Ponctuelle → seul l’effort normal subsiste). Chaque valeur se modifie dans le panneau de la liaison ; <b>Valeurs par défaut</b> revient aux valeurs automatiques. Les indices reprennent les numéros des deux pièces et le <b>point d’application</b>, modifiable à côté des valeurs dans le panneau (A par défaut).</li>
       <li>Le panneau <b>CF</b> liste toutes les CF de la feuille : leur couleur est réglable et l'affichage peut être basculé individuellement ou toutes ensemble en <b>noir</b> ou dans leur <b>couleur enregistrée</b>. Le mode noir colore le lien, son libellé / cadre et ses surfaces propres, sans effacer les couleurs mémorisées. « Propriétés » ouvre les réglages détaillés.</li>
       <li><b>Cycles</b> : affiche, sans détailler les parcours, le nombre de cycles non indépendants passant par chaque CF et le nombre de cycles indépendants calculé par le nombre cyclomatique.</li>
-      <li>${k('Y')} <b>Cycle</b> : partir d'une surface de CF, puis <b>clic ou Ctrl+clic</b> sur les surfaces ou références dans l'ordre voulu et terminer sur l'autre surface de <b>la même CF</b>. Une autre CF du parcours est refusée, mais une surface sans liaison avec la précédente est acceptée : le cycle trace alors un <b>trait direct</b> en affichant un avertissement. Les traits courbes du cycle se <b>glissent à la souris</b> (trait direct comme courbe interne) pour les écarter. <b>Ctrl+clic sur la dernière étape</b> ou ${k('Retour arrière')} la retire ; ${k('Échap')} annule. Surfaces, contacts, contours de références et courbes internes utilisent la <b>couleur du cycle</b> (orange par défaut), avec des pointillés passant près du centre des pièces. La CF garde son trait continu dans son propre mode noir / couleur, indépendamment du cycle. Aucun libellé « cycle N » n'est ajouté au graphe.</li>
+      <li>${k('Y')} <b>Cycle</b> : partir d'une surface de CF, puis <b>clic ou Ctrl+clic</b> sur les surfaces ou références dans l'ordre voulu et terminer sur l'autre surface de <b>la même CF</b> — ou sur le <b>groupe de surfaces qui la contient</b>. Le parcours en cours est tracé <b>en gras</b>, ses nœuds sont surlignés, et sa <b>couleur se choisit dès le début</b> (barre du haut ou panneau Cycles). Une autre CF du parcours est refusée, mais une surface sans liaison avec la précédente est acceptée : le cycle trace alors un <b>trait direct</b> en affichant un avertissement. Les courbes du cycle se <b>glissent à la souris</b> (trait direct comme courbe interne) et se sculptent librement avec les <b>poignées carrées Bézier</b>. <b>✕ sur une étape</b>, <b>Ctrl+clic sur la dernière étape</b> ou ${k('Retour arrière')} la retirent (les voisins sont reconnectés) ; ${k('Échap')} annule. Surfaces, contacts, contours de références et courbes internes utilisent la <b>couleur du cycle</b>, avec des pointillés passant près du centre des pièces ; dans une pièce, le trajet d'un groupe de surfaces est tracé par ses membres, le cycle reste visiblement fermé. La CF garde son trait continu dans son propre mode noir / couleur, indépendamment du cycle. Aucun libellé « cycle N » n'est ajouté au graphe.</li>
       <li>Une référence est entourée en entier au lieu de surligner séparément ses surfaces. Tous ses contacts vers la pièce suivante sont inclus, même si une seule surface est cliquée. Ces surfaces et contacts sont également inclus dans la feuille exportée.</li>
-      <li>Le panneau <b>Cycles</b> liste tous les cycles : numéro et couleur modifiables, visibilité individuelle, tout afficher dans leurs couleurs ou tout cacher, suppression. Changer la couleur d'un cycle masqué ne l'affiche pas. Sur un élément partagé, le <b>dernier cycle affiché</b> est prioritaire (priorité 1 dans le panneau) ; « Afficher en couleur » permet de le remettre au premier plan. Couleurs, visibilité et priorités sont conservées à l'enregistrement et dans les exports. La suppression d'un élément du parcours supprime aussi les cycles invalidés (notification).</li>
+      <li>Le panneau <b>Cycles</b> liste tous les cycles : numéro et couleur modifiables, visibilité individuelle, tout afficher dans leurs couleurs ou tout cacher, suppression, et <b>« Modifier le parcours… »</b> pour retirer, insérer ou remplacer des étapes (le cycle en modification est tracé en gras, comme à la création ; la nouvelle étape s'insère avant la fermeture). Changer la couleur d'un cycle masqué ne l'affiche pas. Sur un élément partagé, le <b>dernier cycle affiché</b> est prioritaire (priorité 1 dans le panneau) ; « Afficher en couleur » permet de le remettre au premier plan. Plusieurs cycles sur un même lien sont tracés <b>côte à côte</b> au lieu de se superposer. Couleurs, visibilité et priorités sont conservées à l'enregistrement et dans les exports. La suppression d'un élément du parcours supprime aussi les cycles invalidés (notification).</li>
       <li><b>Extraire en feuille</b> ou <b>Une feuille par cycle</b> : crée des feuilles indépendantes contenant seulement les pièces, surfaces, contacts et références traversés, et une seule CF. Aucun groupe fonctionnel ou de répétition, aucune surface étrangère au cycle. Les surfaces traversées restent conservées dans ces feuilles même si leur contact avec l'extérieur est exclu. Puis utiliser PNG / SVG. Le graphe source reste intact.</li>
       <li><b>Répétitions de surface</b> : réglables dans la création des liaisons / CF et dans le panneau d'une surface. Au-delà de 1, le nombre apparaît sur une ligne au-dessus du nom (ex. 2x puis CY.1.1). La répétition d'une surface est indépendante de celle de la liaison.</li></ul>
       <p class="muted">Les répétitions uniques des liaisons ne sont pas affichées (LR plutôt que 1x LR). Axes et normales : choix x / y / z ou « Personnalisé… » pour saisir une direction libre.</p>
       <p class="muted">Dans une direction personnalisée, _ introduit un indice : u_123 affiche « u » avec une flèche et « 123 » petit et abaissé. Les indices sont conservés dans les aperçus, le graphe et les exports ; la saisie reste en texte brut. Exemple : y_12 garde l'orientation y.</p>
     <h4>Ergonomie</h4><ul class="help-list">
       <li>${k('V')} / ${k('H')} <b>Déplacer</b> (outil par défaut) : glisser un élément pour le déplacer, ou glisser sur le fond vide pour déplacer la vue. ${k('Échap')} annule l'outil actif, efface la sélection et revient à Déplacer. Après création d'une pièce, d'une liaison, d'un groupe ou d'une CF, l'outil revient à Déplacer ; l'outil Cycle reste actif pour gérer les cycles.</li>
-      <li><b>Liaisons et CF courbes</b> : droites par défaut. Sélectionner le lien, cocher « Courbe » puis glisser la poignée bleue avec Déplacer pour le cintrer. « Remettre droit » annule la courbure. La courbure suit les pièces lors de leurs déplacements et reste conservée dans les fichiers et exports.</li>
+      <li><b>Liaisons et CF courbes</b> : droites par défaut. Sélectionner le lien, cocher « Courbe » puis glisser la poignée bleue ronde avec Déplacer pour le cintrer (forme simple) ; les deux <b>poignées carrées</b> déplacent les points de contrôle d'une <b>courbe de Bézier</b> pour sculpter librement la forme. « Remettre droit » annule la courbure, « Forme simple » revient à la courbure sans poignées. La courbe suit les pièces lors de leurs déplacements et reste conservée dans les fichiers et exports.</li>
       <li>Cliquer pour sélectionner ; ${k('Ctrl')}+clic pour ajouter/retirer ; ${k('Maj')}+glisser sur le fond pour ajouter une sélection rectangle. Glisser une pièce déplace ses surfaces et ses liaisons. Glisser un groupe déplace toutes ses pièces. Les raccourcis clavier et le panneau de propriétés restent disponibles dans tous les modes.</li>
       <li>${k('Ctrl+C')} ${k('Ctrl+V')} ${k('Ctrl+D')} copier / coller / dupliquer · ${k('Suppr')} supprimer · ${k('Ctrl+A')} tout · ${k('Ctrl+I')} inverser la sélection (pratique pour trier ce qu'on supprime).</li>
       <li>${k('Ctrl+Z')} / ${k('Ctrl+Y')} annuler / rétablir · flèches = déplacement fin.</li>
       <li>${k('I')} pipette et ${k('B')} pot de peinture ; les couleurs sont aussi modifiables dans le panneau de propriétés.</li>
-      <li>Molette = zoom · clic droit / clic molette / ${k('Espace')}+glisser = se déplacer · ${k('0')} ajuster.</li>
+      <li>Molette = zoom · clic droit / clic molette / ${k('Espace')}+glisser = se déplacer · ${k('0')} ajuster. <b>Tactile / tablette</b> : pincer avec deux doigts pour zoomer, glisser pour déplacer la vue.</li>
+      <li><b>Petits écrans</b> : le chevron ${k('⌃')} de la barre du haut réduit la barre d’outils (elle rouvre avec ${k('⌄')}). Le panneau de droite se cache avec ${k('⟩')} (bouton ${k('☰')} pour le réafficher) ou devient <b>flottant</b> avec ${k('⇱')}.</li>
+      <li><b>Verrouillage</b> (Accueil) : les boutons <b>Pièces</b> et <b>Surfaces</b> verrouillent la position de tous les éléments concernés — plus de déplacement par mégarde (glisser et flèches bloqués) ; les tailles et noms restent modifiables.</li>
+      <li><b>Double-clic sur une pièce</b> : son <b>éditeur flottant</b> s’ouvre (nom, numéro, couleurs, surfaces, actions) et reste déplaçable par son titre pendant que le graphe reste visible.</li>
+      <li><b>Lien de partage</b> (Fichier) : le graphe complet est compressé <b>dans l’URL</b> ; celui qui l’ouvre reçoit une copie dans un nouveau projet, sans serveur ni fichier à envoyer.</li>
       <li><b>Image de référence</b> : choisir une image locale (PNG, JPEG, WebP, GIF, BMP ou AVIF). La fenêtre apparaît en haut à droite du tableau : glisser son titre pour la déplacer et son coin inférieur droit pour la redimensionner. Molette ou + / − pour zoomer dans l'image ; glisser l'image pour la parcourir ; « Ajuster » pour la voir entière. Le bouton − du titre la cache, « Image de référence » la réaffiche, ✕ la supprime et « Remplacer » change l'image. Elle est <b>temporaire</b>, commune aux feuilles, non enregistrée dans le JSON et absente des exports PNG / SVG ; recharger la page la supprime.</li>
       <li>Feuilles en bas : ⧉ <b>Dupliquer la feuille</b> pour étudier une fermeture géométrique sans toucher au graphe d'origine. « Extraire vers une feuille » copie une zone sélectionnée.</li>
       <li>Export PNG / SVG / PDF / PowerPoint modifiable / copie d’image. Le PDF ouvre l’aperçu d’impression du navigateur : choisir « Enregistrer au format PDF ». La première page montre le graphe entier ; les pages suivantes reprennent les cycles isolés comme avec « Extraire en feuille ». Sans cycle, le PDF contient seulement la vue d’ensemble.</li>

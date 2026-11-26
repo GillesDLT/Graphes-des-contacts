@@ -285,7 +285,7 @@ function createIsoReference(targetKind, targetId) {
    vérifiée : ⏤ ⏥ ○ ⌭ ⌒ ⌓ ⟂ ∠ ∥ ⌖ ◎ ⌯ ↗ ⌰ ⌀ ± et Ⓜ Ⓛ Ⓔ Ⓣ Ⓕ).
    ============================================================ */
 const SPEC_SYMBOLS = [
-  ['straight', '\u23E4', 'Droiture'],
+  ['straight', '\u23E4', 'Rectitude'],
   ['flat', '\u23E5', 'Planéité'],
   ['circ', '\u25CB', 'Circularité'],
   ['cyl', '\u232D', 'Cylindricité'],

@@ -7,6 +7,12 @@ const clone = o => JSON.parse(JSON.stringify(o));
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const r1 = v => Math.round(v * 10) / 10;
 const clampN = (v, a, b) => Math.max(a, Math.min(b, v));
+/* Points de contrôle d'une courbe : deux points {u, v} exprimés dans le repère
+   de la corde (u le long de la corde, v selon la normale), ou null = courbe
+   automatique. */
+function validCurveCps(cps) {
+  return Array.isArray(cps) && cps.length === 2 && cps.every(p => p && Number.isFinite(p.u) && Number.isFinite(p.v));
+}
 
 function hexToRgb(h) {
   h = (h || '#000000').replace('#', '');
@@ -63,6 +69,8 @@ const DEFAULT_SETTINGS = {
   showHints: true,
   showNominalZero: false,
   grid: true,
+  lockPieces: false,
+  lockSurfaces: false,
   torseurLetters: { X: 'u', L: 'α', Y: 'v', M: 'β', Z: 'w', N: 'γ' },
   groupColors: { rep: '#e9edf6', fonc: '#fde7c4', ref: '#2b7de9' }
 };
@@ -183,6 +191,9 @@ function loadDoc(o) {
     });
     connections(s).forEach(l => {
       if (l.curved && (!Number.isFinite(l.bend))) throw new Error('Courbure de lien invalide.');
+      /* Points de contrôle Bézier libres : indice {u, v} le long de la corde.
+         Une valeur illisible est ignorée (retour à la courbure simple). */
+      if (l.cps != null && !validCurveCps(l.cps)) delete l.cps;
     });
     s.cycles.forEach((c, i) => {
       if (!c || !Number.isSafeInteger(c.num) || c.num < 1) throw new Error('Numéro de cycle invalide.');
@@ -190,6 +201,12 @@ function loadDoc(o) {
       if (!/^#[0-9a-f]{6}$/i.test(c.color)) throw new Error('Couleur de cycle invalide.');
       if (c.displayOrder == null) c.displayOrder = i + 1;
       if (!Number.isSafeInteger(c.displayOrder) || c.displayOrder < 1) throw new Error('Priorité de cycle invalide.');
+      /* Déformations manuelles des courbes du cycle (corde + points Bézier). */
+      if (c.bends != null && (typeof c.bends !== 'object' || Array.isArray(c.bends))) c.bends = {};
+      if (c.bends) for (const key of Object.keys(c.bends)) if (!Number.isFinite(c.bends[key])) delete c.bends[key];
+      if (c.cps != null && (typeof c.cps !== 'object' || Array.isArray(c.cps))) c.cps = {};
+      if (c.cps) for (const key of Object.keys(c.cps)) if (!validCurveCps(c.cps[key])) delete c.cps[key];
+      (c.edges || []).forEach(e => { if (e && e.cps != null && !validCurveCps(e.cps)) delete e.cps; });
     });
     s.groups.forEach(g => {
       delete g.pts; delete g.auto; delete g.n; delete g.dash;

@@ -26,6 +26,8 @@ function renderProps() {
   if (target) $$('input[type=color][data-k]', box).forEach(i => i.value = rgbToHex(target[i.dataset.k]) || '#000000');
   wireProps(box, target);
   if (target && kindOf(target.id) === 'isoSpec') wireSpecEditor(box, target, null);
+  /* L'éditeur flottant de pièce suit le même contenu que le panneau. */
+  if (typeof refreshPiecePopup === 'function') refreshPiecePopup();
 }
 
 function emptyPanel() {
@@ -145,8 +147,8 @@ function groupPanel(g) {
       <button data-pa="del" class="danger">🗑 Supprimer</button></div>`;
 }
 function curveFields(l) {
-  return fRow('Tracé', fCheck('curved', !!l.curved, 'Courbe (poignée avec Déplacer)')) +
-    (l.curved ? '<div class="btns"><button data-pa="straight">Remettre droit</button></div>' : '');
+  return fRow('Tracé', fCheck('curved', !!l.curved, 'Courbe (poignées avec Déplacer)')) +
+    (l.curved ? `<div class="btns"><button data-pa="straight">Remettre droit</button>${validCurveCps(l.cps) ? '<button data-pa="curvereset" title="Revenir à la courbure simple, sans les poignées Bézier">↺ Forme simple</button>' : ''}</div>` : '');
 }
 function cfgPanel(c) {
   return `<h3 style="color:${cfRenderColor(c)}">${esc(cfDisplayName(c))}</h3>
@@ -183,6 +185,7 @@ function applyField(target, inp) {
   }
   else v = inp.value;
   const kd = kindOf(target.id);
+  const errBox = inp.closest('#props, .pe-body, .body')?.querySelector('#ppErr') || $('#ppErr');
   if (kd === 'isoRef' && k === 'type') {
     target.type = v;
     if (v === 'partial' && (target.text === 'A' || !target.text)) target.text = '⌀';
@@ -202,8 +205,8 @@ function applyField(target, inp) {
     inp.classList.remove('invalid');
   }
   if (kd === 'piece') {
-    if (k === 'name') { if (!v.trim() || nameUsed(v, target.id)) { inp.classList.add('invalid'); $('#ppErr').textContent = v.trim() ? 'Nom déjà utilisé' : 'Nom obligatoire'; return false; } inp.classList.remove('invalid'); $('#ppErr').textContent = ''; }
-    if (k === 'num') { v = Math.round(v); if (numUsed(v, target.id)) { inp.classList.add('invalid'); $('#ppErr').textContent = 'Numéro déjà utilisé'; return false; } inp.classList.remove('invalid'); $('#ppErr').textContent = ''; }
+    if (k === 'name') { if (!v.trim() || nameUsed(v, target.id)) { inp.classList.add('invalid'); errBox.textContent = v.trim() ? 'Nom déjà utilisé' : 'Nom obligatoire'; return false; } inp.classList.remove('invalid'); errBox.textContent = ''; }
+    if (k === 'num') { v = Math.round(v); if (numUsed(v, target.id)) { inp.classList.add('invalid'); errBox.textContent = 'Numéro déjà utilisé'; return false; } inp.classList.remove('invalid'); errBox.textContent = ''; }
   }
   if (kd === 'surface' && k === 'idx') v = Math.max(1, Math.round(v));
   if (kd === 'liaison' && k === 'point') { target.details = Object.assign({}, target.details, { point: v.trim() }); return true; }
@@ -231,7 +234,10 @@ function wireProps(box, target) {
     const c = CY(inp.dataset.cycleColor);
     if (c) { checkpoint(); c.color = inp.value; changed(); }
   });
-  $$('[data-ca]', box).forEach(b => b.onclick = () => cycleAction(b.dataset.ca, b.dataset.cid));
+  $$('[data-ca]', box).forEach(b => b.onclick = () => cycleAction(b.dataset.ca, b.dataset.cid, b));
+  $$('[data-cycle-draft-color]', box).forEach(inp => inp.oninput = () => {
+    if (cycleDraft) { cycleDraft.color = inp.value; render(); autosave(); }
+  });
   $$('[data-cycle-visible]', box).forEach(inp => inp.onchange = () => {
     const c = CY(inp.dataset.cycleVisible);
     if (c) { checkpoint(); setCycleVisible(c, inp.checked); changed(); }
@@ -300,7 +306,8 @@ function propAction(a, t, btn) {
     case 'loopcalc': closedLoopsDialog(); break;
     case 'cycles': setTool('cycle'); break;
     case 'cfs': setTool('cfg'); break;
-    case 'straight': checkpoint(); t.curved = false; t.bend = 0; changed(); break;
+    case 'straight': checkpoint(); t.curved = false; t.bend = 0; delete t.cps; changed(); break;
+    case 'curvereset': checkpoint(); delete t.cps; changed(); break;
     case 'circle': checkpoint(); { const r = Math.round((t.rx + t.ry) / 2); t.rx = r; t.ry = r; } changed(); break;
     case 'torsorreset': checkpoint(); delete t.torsor; changed(); break;
     case 'nameauto': checkpoint(); t.name = ''; changed(); break;
