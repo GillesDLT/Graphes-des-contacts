@@ -339,38 +339,52 @@ function visibleCycleContents(cycles, s = S()) {
   return result;
 }
 /* Connexions internes d'un cycle : le parcours est suivi pas à pas et, sur
-   chaque pièce, les points d'attache successifs (surfaces concrètes) sont
-   reliés deux à deux dans l'ordre du parcours. Un groupe de surfaces est
-   traversé par ses membres : le cycle reste visiblement fermé dans la pièce,
-   y compris quand il entre et ressort par les contacts d'une référence. */
+   chaque hôte (pièce, ou ensemble des pièces d'un groupe fonctionnel réduit),
+   les points d'attache successifs sont reliés deux à deux dans l'ordre du
+   parcours. Un groupe de surfaces est traversé par ses membres ; une excursion
+   hors de l'hôte (aller-retour par une autre pièce) coupe la chaîne, pour ne
+   pas relier deux visites distinctes. */
 function cycleInternalConnections(c, s = S()) {
   const surface = id => s.surfaces.find(f => f.id === id);
-  const byPiece = new Map(); // pieceId -> [surfaceId, …] dans l'ordre du parcours
+  const runs = new Map();     // hostId -> [course, …]
+  const openRun = new Map();  // hostId -> course en cours
   const touch = f => {
     if (!f) return;
-    const arr = byPiece.get(f.pieceId) || (byPiece.set(f.pieceId, []), byPiece.get(f.pieceId));
-    if (arr[arr.length - 1] !== f.id) arr.push(f.id);
+    const hid = hostIdOf(f.pieceId);
+    let run = openRun.get(hid);
+    if (!run) { run = []; (runs.get(hid) || runs.set(hid, []).get(hid)).push(run); openRun.set(hid, run); }
+    if (run[run.length - 1] !== f.id) run.push(f.id);
   };
   for (const e of c.edges || []) {
     if (!e) continue;
-    if (e.kind === 'internal') { touch(surface(e.sa)); touch(surface(e.sb)); continue; }
-    /* Contact : la liaison pose ses deux surfaces ; les contacts d'une
-       référence vers la pièce suivante sont tous inclus. */
-    const links = referenceStepLinks(e.from, e.to, s);
-    if (e.linkId) links.add(e.linkId);
-    for (const id of links) {
-      const l = s.liaisons.find(x => x.id === id);
-      if (l) { touch(surface(l.a)); touch(surface(l.b)); }
+    const touched = new Set();
+    const t = id => { const f = surface(id); if (f) { touched.add(hostIdOf(f.pieceId)); touch(f); } };
+    if (e.kind === 'internal') { t(e.sa); t(e.sb); }
+    else {
+      /* Contact : la liaison pose ses deux surfaces dans l'ordre du parcours ;
+         les contacts d'une référence vers la pièce suivante sont tous inclus. */
+      t(e.sa); t(e.sb);
+      const links = referenceStepLinks(e.from, e.to, s);
+      if (e.linkId) links.delete(e.linkId);
+      for (const id of links) {
+        const l = s.liaisons.find(x => x.id === id);
+        if (l) { t(l.a); t(l.b); }
+      }
     }
-    touch(surface(e.sa)); touch(surface(e.sb));
+    for (const hid of [...openRun.keys()]) if (!touched.has(hid)) openRun.delete(hid);
   }
   const result = [];
-  for (const [pieceId, ids] of byPiece) {
-    for (let i = 0; i + 1 < ids.length; i++) {
-      if (ids[i] === ids[i + 1]) continue;
-      const pair = [ids[i], ids[i + 1]].sort(), key = pieceId + ':' + pair.join(':');
-      if (result.some(x => x.key === key)) continue;
-      result.push({ key, pieceId, a: pair[0], b: pair[1] });
+  for (const [hid, list] of runs) {
+    for (const ids of list) {
+      for (let i = 0; i + 1 < ids.length; i++) {
+        if (ids[i] === ids[i + 1]) continue;
+        const pair = [ids[i], ids[i + 1]].sort();
+        /* Clé identique à l'ancien format (préfixe = pièce du premier nœud du
+           parcours) : les déformations manuelles des cycles restent valables. */
+        const key = (surface(ids[i])?.pieceId || hid) + ':' + pair.join(':');
+        if (result.some(x => x.key === key)) continue;
+        result.push({ key, pieceId: surface(ids[i])?.pieceId || hid, hostId: hid, host: hostOf((surface(ids[i]) || surface(ids[i + 1]))?.pieceId) || P(hid), a: pair[0], b: pair[1] });
+      }
     }
   }
   return result;

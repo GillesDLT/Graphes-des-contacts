@@ -305,10 +305,20 @@ function nominalSVG(bubbles = false) {
     return `<g data-nominal-lines="${p.id}" pointer-events="none">${lines}</g>`;
   }).join('');
 }
+/* Accroche interne d'un nœud de cycle. Les surfaces d'une pièce masquée (groupe
+   fonctionnel réduit) ont une accroche à l'intérieur de l'ellipse du groupe :
+   le parcours du cycle reste visible dans le groupe, au lieu de démarrer à ses
+   seules surfaces visibles. */
 function internalNodePoint(id, piece) {
   const surface = SF(id);
-  if (surface) return surfVisible(surface) ? { ...spos(surface), r: surface.r + 2 } : null;
-  const group = G(id); if (!group || !nodeSurfaces(id).some(s => s.pieceId === piece.id && surfVisible(s))) return null;
+  if (surface) {
+    if (!surfVisible(surface) && piece) {
+      const th = Number.isFinite(surface.ang) ? surface.ang : Math.atan2(surface.dy || -1, surface.dx || 1);
+      return { x: piece.x + Math.cos(th) * (piece.rx || 95) * 0.55, y: piece.y + Math.sin(th) * (piece.ry || 95) * 0.55, r: surface.r + 2 };
+    }
+    return { ...spos(surface), r: surface.r + 2 };
+  }
+  const group = G(id); if (!group || !nodeSurfaces(id).some(s => hostIdOf(s.pieceId) === piece.id)) return null;
   let best = null, distance = Infinity;
   for (const loop of groupShape(group).loops) for (let i = 0; i < loop.length; i++) {
     const a = loop[i], b = loop[(i + 1) % loop.length], dx = b[0] - a[0], dy = b[1] - a[1];
@@ -363,13 +373,13 @@ function cycleInternalSVG(cycles) {
   const totals = new Map();
   steps.forEach(e => { const k = e.pieceId + ':' + e.a + ':' + e.b; const n = totals.get(k) || 0; totals.set(k, n + 1); e._i = n; });
   return steps.map(e => {
-    const p = P(e.pieceId); if (!p || isHiddenPiece(p.id)) return '';
+    const p = e.host || P(e.pieceId); if (!p) return '';
     const ha = internalNodePoint(e.a, p), hb = internalNodePoint(e.b, p); if (!ha || !hb) return '';
     const trim = point => {
       const dx = p.x - point.x, dy = p.y - point.y, len = Math.hypot(dx, dy) || 1;
-      return { x: point.x + dx / len * point.r, y: point.y + dy / len * point.r };
-    };
+      return { x: point.x + dx / len * point.r, y: point.y + dy / len * point.r } };
     let start = trim(ha), end = trim(hb);
+    if (Math.hypot(end.x - start.x, end.y - start.y) < 2) return '';
     const dx = end.x - start.x, dy = end.y - start.y, len = Math.hypot(dx, dy);
     const nx = len > 1 ? -dy / len : 0, ny = len > 1 ? dx / len : 1;
     const n = totals.get(e.pieceId + ':' + e.a + ':' + e.b) || 1, fan = (e._i - (n - 1) / 2) * CURVE_FAN;
