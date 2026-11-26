@@ -339,41 +339,98 @@ function visibleCycleContents(cycles, s = S()) {
   return result;
 }
 /* Connexions internes d'un cycle : le parcours est suivi pas à pas et, sur
-   chaque pièce, les points d'attache successifs (surfaces concrètes) sont
-   reliés deux à deux dans l'ordre du parcours. Un groupe de surfaces est
-   traversé par ses membres : le cycle reste visiblement fermé dans la pièce,
-   y compris quand il entre et ressort par les contacts d'une référence. */
+   chaque hôte (pièce, ou ensemble des pièces d'un groupe fonctionnel réduit),
+   les points d'attache successifs sont reliés deux à deux dans l'ordre du
+   parcours. Un groupe de surfaces est traversé par ses membres ; une excursion
+   hors de l'hôte (aller-retour par une autre pièce) coupe la chaîne, pour ne
+   pas relier deux visites distinctes. La fermeture par la CF est suivie en
+   dernier : la boucle reste fermée même quand la CF et ses surfaces sont
+   masquées dans un groupe fonctionnel réduit. */
 function cycleInternalConnections(c, s = S()) {
   const surface = id => s.surfaces.find(f => f.id === id);
-  const byPiece = new Map(); // pieceId -> [surfaceId, …] dans l'ordre du parcours
+  const runs = new Map();     // hostId -> [course, …]
+  const openRun = new Map();  // hostId -> course en cours
   const touch = f => {
     if (!f) return;
-    const arr = byPiece.get(f.pieceId) || (byPiece.set(f.pieceId, []), byPiece.get(f.pieceId));
-    if (arr[arr.length - 1] !== f.id) arr.push(f.id);
+    const hid = hostIdOf(f.pieceId);
+    let run = openRun.get(hid);
+    if (!run) { run = []; (runs.get(hid) || runs.set(hid, []).get(hid)).push(run); openRun.set(hid, run); }
+    if (run[run.length - 1] !== f.id) run.push(f.id);
+  };
+  /* Une étape pose ses surfaces dans l'ordre du parcours ; la chaîne d'un hôte
+     reste ouverte tant que l'étape touche cet hôte. */
+  const walk = fs => {
+    const touched = new Set();
+    for (const f of fs) { if (!f) continue; touch(f); touched.add(hostIdOf(f.pieceId)); }
+    for (const hid of [...openRun.keys()]) if (!touched.has(hid)) openRun.delete(hid);
   };
   for (const e of c.edges || []) {
     if (!e) continue;
-    if (e.kind === 'internal') { touch(surface(e.sa)); touch(surface(e.sb)); continue; }
-    /* Contact : la liaison pose ses deux surfaces ; les contacts d'une
-       référence vers la pièce suivante sont tous inclus. */
-    const links = referenceStepLinks(e.from, e.to, s);
-    if (e.linkId) links.add(e.linkId);
-    for (const id of links) {
-      const l = s.liaisons.find(x => x.id === id);
-      if (l) { touch(surface(l.a)); touch(surface(l.b)); }
+    const fs = [surface(e.sa), surface(e.sb)];
+    if (e.kind !== 'internal') {
+      /* Contact : la liaison pose ses deux surfaces dans l'ordre du parcours ;
+         les contacts d'une référence vers la pièce suivante sont tous inclus. */
+      const links = referenceStepLinks(e.from, e.to, s);
+      if (e.linkId) links.delete(e.linkId);
+      for (const id of links) {
+        const l = s.liaisons.find(x => x.id === id);
+        if (l) { fs.push(surface(l.a), surface(l.b)); }
+      }
     }
-    touch(surface(e.sa)); touch(surface(e.sb));
+    walk(fs);
   }
+  /* Fermeture du cycle par sa CF : la dernière étape rejoint la première. Un
+     parcours en cours de création n'est pas encore fermé. */
+  const ns = c.nodes || [], cf = s.cfgs.find(f => f.id === c.cfId);
+  const endOn = (id, end) => id === end || (G(id)?.kind === 'ref' && G(id).members.includes(end));
+  if (cf && ns.length >= 2 &&
+      ((endOn(ns[0], cf.a) && endOn(ns[ns.length - 1], cf.b)) || (endOn(ns[0], cf.b) && endOn(ns[ns.length - 1], cf.a))))
+    walk([...nodeSurfaces(ns[ns.length - 1], s), ...nodeSurfaces(ns[0], s)]);
   const result = [];
-  for (const [pieceId, ids] of byPiece) {
-    for (let i = 0; i + 1 < ids.length; i++) {
-      if (ids[i] === ids[i + 1]) continue;
-      const pair = [ids[i], ids[i + 1]].sort(), key = pieceId + ':' + pair.join(':');
-      if (result.some(x => x.key === key)) continue;
-      result.push({ key, pieceId, a: pair[0], b: pair[1] });
+  for (const [hid, list] of runs) {
+    for (const ids of list) {
+      for (let i = 0; i + 1 < ids.length; i++) {
+        if (ids[i] === ids[i + 1]) continue;
+        const pair = [ids[i], ids[i + 1]].sort();
+        /* Clé identique à l'ancien format (préfixe = pièce du premier nœud du
+           parcours) : les déformations manuelles des cycles restent valables. */
+        const key = (surface(ids[i])?.pieceId || hid) + ':' + pair.join(':');
+        if (result.some(x => x.key === key)) continue;
+        result.push({ key, pieceId: surface(ids[i])?.pieceId || hid, hostId: hid, host: hostOf((surface(ids[i]) || surface(ids[i + 1]))?.pieceId) || P(hid), a: pair[0], b: pair[1] });
+      }
     }
   }
-  return result;
+  return elideHiddenSteps(result, s);
+}
+/* Groupe fonctionnel réduit : les surfaces masquées (sans contact avec
+   l'extérieur) sont enjambées — deux surfaces visibles qui se suivent à travers
+   elles sont reliées directement, en couleur de cycle, sur l'ellipse du groupe.
+   Une suite entièrement masquée est conservée telle quelle, tracée à l'intérieur
+   de l'ellipse. */
+function elideHiddenSteps(pairs, s = S()) {
+  const sf = id => s.surfaces.find(f => f.id === id);
+  const hidden = id => { const f = sf(id); return !!f && !surfVisible(f); };
+  const visible = id => { const f = sf(id); return !!f && surfVisible(f); };
+  for (let again = true; again;) {
+    again = false;
+    for (const h of new Set(pairs.flatMap(p => [p.a, p.b]))) {
+      if (!hidden(h)) continue;
+      const mine = pairs.filter(p => p.a === h || p.b === h);
+      const nbrs = [...new Set(mine.map(p => (p.a === h ? p.b : p.a)))];
+      if (mine.length !== 2 || nbrs.length !== 2 || !nbrs.some(visible)) continue;
+      const [n1, n2] = nbrs;
+      pairs = pairs.filter(p => !(p.a === h || p.b === h));
+      if (n1 === n2) { again = true; break; }
+      const pair = [n1, n2].sort();
+      if (pairs.some(p => p.a === pair[0] && p.b === pair[1])) { again = true; break; }
+      const src = mine[0];
+      pairs.push({ key: (sf(pair[0])?.pieceId || src.hostId) + ':' + pair.join(':'),
+        pieceId: src.pieceId, hostId: src.hostId, host: src.host, a: pair[0], b: pair[1] });
+      again = true;
+      break;
+    }
+  }
+  return pairs;
 }
 /* Liaison directe du cycle : utilisée quand l'utilisateur enchaîne deux surfaces
    qu'aucune liaison ne relie. Elle est tracée en courbe et se déforme au glisser. */

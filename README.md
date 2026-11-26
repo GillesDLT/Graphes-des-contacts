@@ -273,8 +273,11 @@ Le cycle contient exactement une CF. Les contacts, surfaces et références
 utilisent la couleur du cycle, avec des courbes pointillées pour les connexions
 internes aux pièces. Dans une pièce, le trajet d’un **groupe de surfaces** est
 tracé par ses membres : le cycle reste visiblement fermé, y compris quand il
-entre et ressort par les contacts d’une référence. La CF conserve son propre
-affichage noir ou couleur.
+entre et ressort par les contacts d’une référence. Dans un **groupe
+fonctionnel réduit**, le trajet reste visible sur l’ellipse : les surfaces
+masquées et la CF intérieure sont enjambées, et deux surfaces visibles qui se
+suivent à travers le groupe restent reliées en couleur de cycle. La CF conserve
+son propre affichage noir ou couleur.
 
 Le panneau **Cycles** permet de changer les couleurs, d’afficher ou de masquer
 les cycles, de les extraire dans des feuilles indépendantes et de **modifier le
