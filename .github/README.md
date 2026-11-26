@@ -49,9 +49,17 @@ projets ou comptes rendus.
   symboles de caractéristique, indications, indicateurs (Ⓜ maxi matière,
   Ⓔ gabarit…) et liens flèche ou trait simple vers les surfaces.
 - Construire des cycles passant par les contacts et références, avec une seule
-  CF par cycle.
+  CF par cycle : parcours en **gras** pendant la création, couleur choisie dès
+  le départ, étapes modifiables à tout moment (« Modifier le parcours… »).
 - Afficher ou masquer les cycles, choisir leur couleur et gérer les CF en noir
-  ou dans leur couleur.
+  ou dans leur couleur. Plusieurs cycles sur un même lien sont tracés **côte à
+  côte**.
+- Sculpter librement les **courbes de Bézier** des liaisons, CF et cycles
+  (poignées carrées), ou garder la courbure simple (poignée ronde).
+- **Verrouiller la position** de toutes les pièces ou de toutes les surfaces
+  (Accueil) pour éviter les déplacements par mégarde.
+- Adapter l’affichage aux **petits écrans** : barre d’outils réductible
+  (chevron ⌃), panneau de propriétés cachable ou flottant, zoom au pincement.
 - Compter les cycles non indépendants passant par chaque CF et calculer le nombre de cycles indépendants par le nombre cyclomatique.
 - Exporter en **PDF multipage** : une vue d’ensemble, puis une page isolée par cycle dessiné à la main ; exporter aussi en PNG, SVG ou PowerPoint éditable.
 - Ajouter des notes textuelles déplaçables et choisir un nom/emplacement au moment de l’export.
@@ -210,6 +218,11 @@ CF : `PL.1.1 — CF1 — PL.2.1 — CF2 — PL.3.1` décrit deux CF qui se succ�
 la même surface `PL.2.1`. Son anneau est alors partagé en autant de couleurs que
 de CF. Supprimer une CF supprime ses surfaces devenues inutiles.
 
+Une extrémité de CF peut aussi être un **groupe de référence** (référence ISO) :
+le trait s’accroche alors au contour du groupe, du côté de l’autre extrémité.
+Cliquer sur le groupe avec l’outil **CF**, ou le choisir dans la liste
+« Groupes de référence » de la fenêtre.
+
 Le panneau **CF** liste toutes les conditions fonctionnelles de la feuille.
 Il permet de les afficher en noir ou dans leur couleur, individuellement ou
 toutes ensemble, sans effacer leur couleur enregistrée.
@@ -239,27 +252,41 @@ Le même outil affiche le nombre de cycles indépendants (nombre cyclomatique) :
 ### Construire un cycle
 
 1. Cliquer sur **Cycle**.
-2. Commencer par une surface de la CF étudiée.
+2. Commencer par une surface de la CF étudiée : la **couleur du cycle** se
+   choisit dès ce moment (barre du haut ou panneau Cycles).
 3. Cliquer successivement sur les surfaces ou les groupes de référence du
-   parcours : le cycle suit **l’ordre des clics**.
-4. Terminer sur l’autre surface de **la même CF**, puis valider.
+   parcours : le cycle suit **l’ordre des clics** et le parcours en cours est
+   tracé **en gras**, ses nœuds surlignés.
+4. Terminer sur l’autre surface de **la même CF** — ou sur le **groupe de
+   surfaces qui la contient** — puis valider.
 
 Le cycle est permissif : lorsque deux surfaces successives sont reliées par une
 liaison, le cycle reprend le trait de cette liaison ; sinon il trace un **trait
 direct** et un message d’avertissement le signale, sans rien bloquer.
 
-Les traits courbes du cycle (traits directs et courbes internes aux pièces)
-peuvent être **glissés à la souris** pour les écarter ou les rendre plus lisibles,
-comme la courbure d’une liaison. Le réglage est conservé à l’enregistrement.
+Les courbes du cycle (traits directs et courbes internes aux pièces) peuvent
+être **glissées à la souris** pour les écarter, et **sculptées librement** avec
+les deux poignées carrées (courbe de Bézier) ; la poignée ronde revient à la
+courbure simple. Le réglage est conservé à l’enregistrement.
 
 Le cycle contient exactement une CF. Les contacts, surfaces et références
 utilisent la couleur du cycle, avec des courbes pointillées pour les connexions
-internes aux pièces. La CF conserve son propre affichage noir ou couleur.
+internes aux pièces. Dans une pièce, le trajet d’un **groupe de surfaces** est
+tracé par ses membres : le cycle reste visiblement fermé, y compris quand il
+entre et ressort par les contacts d’une référence. La CF conserve son propre
+affichage noir ou couleur.
 
 Le panneau **Cycles** permet de changer les couleurs, d’afficher ou de masquer
-les cycles et de les extraire dans des feuilles indépendantes. Lorsqu’un élément
-est partagé, le dernier cycle affiché est prioritaire ; l’ordre est indiqué
-dans le panneau.
+les cycles, de les extraire dans des feuilles indépendantes et de **modifier le
+parcours** d’un cycle existant (« Modifier le parcours… »). Le parcours est
+édité dans une **arborescence** : monter ou descendre une étape (↑ ↓ ou
+**glisser-déposer**, les liaisons sont recalculées), en **insérer une à la
+position voulue** (＋ puis cliquer la surface sur le graphe), en supprimer une
+(✕, les voisins sont reconnectés). Un **clic sur une liaison** ajoute
+directement la surface concernée, **Ctrl+Z** recule d’une étape, et **glisser
+le fond** déplace la vue pendant la création. Lorsqu’un élément est partagé,
+le dernier cycle affiché est prioritaire ; plusieurs cycles sur un même lien
+sont tracés **côte à côte** ; l’ordre est indiqué dans le panneau.
 
 ## ISO GPS : références et spécifications
 
@@ -287,7 +314,25 @@ pour masquer / afficher leurs symboles (utile avant export).
 Les indications adjacentes non encadrées se placent en haut à gauche du cadre :
 répétition (sans « 1x » si elle vaut 1), symbole de diamètre, valeur et tolérance.
 Le sélecteur **Modificateur de taille** ajoute LP, GG, GC, GN ou GX à la cote
-adjacente, dans un cartouche arrondi (et non dans le cadre de tolérance). Après les sections, la partie « Indication
+adjacente, dans un cartouche arrondi (et non dans le cadre de tolérance).
+
+Sous la cote, une rangée de badges ajoute d’autres symboles à sa suite, sur la
+même ligne et dans l’ordre d’ajout : le bouton **Ⓔ E** pose le principe
+d’enveloppe en un clic, et le champ de lettres libres (par exemple « SX ») crée
+un **oblong** autour du texte, réduit à un **cercle** quand il n’y a qu’une seule
+lettre. Chaque badge se réordonne (◀ ▶) ou se supprime.
+
+L’option **👁 Cacher le cadre**, placée à côté du titre « Sections du cadre »,
+masque le cadre de tolérance et ses indications complémentaires : il ne reste que
+le texte de la cote et ses badges, soulignés. Les liens vers les composants
+partent alors du soulignement, et la spécification reste liée à sa pièce (les
+sections sont conservées et réapparaissent quand l’option est désactivée).
+
+Sur le cadre, le dernier segment de chaque lien arrive perpendiculairement à
+l’arête : vertical quand le coude est au-dessous (ou au-dessus), horizontal quand
+il est sur le côté.
+
+Après les sections, la partie « Indication
 complémentaire » propose les quatre types d’indicateurs ; leurs symboles graphiques
 seront ajustés à partir de la référence fournie. Les liens vers les composants se
 règlent en flèche, triangle plein ou trait simple. Les quatre types d’indication
@@ -313,8 +358,15 @@ les exports.
 | Ajouter une note | **N**, puis clic sur le graphe |
 | Quitter l’outil actif | **Échap** |
 
-Pendant la création d’un cycle, **Ctrl+clic sur la dernière étape** ou
-**Retour arrière** retire cette étape.
+Pendant la création d’un cycle, **Ctrl+clic sur la dernière étape**,
+**Retour arrière** ou le bouton **✕** d’une étape retire cette étape ; la
+couleur du parcours se règle dès le début dans la barre du haut.
+
+Sur **tablette ou tactile** : pincer avec deux doigts pour zoomer, glisser pour
+déplacer la vue. Le chevron **⌃** de la barre du haut réduit la barre d’outils
+et le bouton **◧** affiche / cache le panneau de droite. Un **double-clic sur
+une pièce** ouvre son éditeur flottant, centré à l’écran. Les boutons
+**Pièces** et **Surfaces** de l’accueil verrouillent les positions.
 
 ## Sauvegarder son travail et le partager
 
@@ -324,8 +376,10 @@ Chaque **projet** est un document complet (avec ses feuilles), enregistré
 automatiquement dans le navigateur. La liste des projets s'ouvre au démarrage
 et au rechargement ; le bouton **🗂 nom du projet** permet d'y revenir :
 
-- **Ouvrir** bascule d'un projet à l'autre sans rien perdre ;
-- **＋ Nouveau projet** crée un document vide ;
+- **cliquer un projet pour l'ouvrir** (ou Entrée au clavier) ; le projet
+  courant est marqué « ✓ ouvert » ;
+- la **recherche** filtre la liste par nom ;
+- **＋ Nouveau projet** crée un document vide, **⤒ Importer** ouvre un `.json` ;
 - **✎** renomme, **⧉** duplique, **⤓** enregistre en `.json`, **🗑** supprime ;
 - la poignée **⠿** permet de **ranger la liste dans l'ordre choisi**, par
   glisser-déposer.
@@ -337,6 +391,21 @@ y compris pour les projets partagés.
 
 Un ancien document unique (`grapheLiaisons.v1`) est repris automatiquement au
 premier lancement sous forme de projet : rien n'est perdu.
+
+### Partager par un simple lien (sans serveur)
+
+Dans **Fichier**, le bouton **Lien de partage** compresse le graphe complet
+**dans l'URL elle-même** :
+
+```
+https://…/index.html#d=eJx…
+```
+
+Celui qui ouvre ce lien reçoit une **copie du graphe dans un nouveau projet**,
+sans serveur, sans compte et sans fichier à envoyer. Le lien reflète l'état du
+projet au moment du clic ; au-delà de quelques dizaines de Ko, certains outils
+de messagerie peuvent le tronquer — préférez alors le fichier `.json` ou le
+partage en direct ci-dessous.
 
 ### Partager un graphe en direct (édition à plusieurs)
 

@@ -285,14 +285,14 @@ function createIsoReference(targetKind, targetId) {
    vérifiée : ⏤ ⏥ ○ ⌭ ⌒ ⌓ ⟂ ∠ ∥ ⌖ ◎ ⌯ ↗ ⌰ ⌀ ± et Ⓜ Ⓛ Ⓔ Ⓣ Ⓕ).
    ============================================================ */
 const SPEC_SYMBOLS = [
-  ['straight', '\u23E4', 'Droiture'],
+  ['straight', '\u23E4', 'Rectitude'],
   ['flat', '\u23E5', 'Planéité'],
   ['circ', '\u25CB', 'Circularité'],
   ['cyl', '\u232D', 'Cylindricité'],
   ['pline', '\u2312', 'Profil d’une ligne'],
   ['psurf', '\u2313', 'Profil d’une surface'],
   ['perp', '\u27C2', 'Perpendicularité'],
-  ['angularity', '\u2220', 'Angulosité'],
+  ['angularity', '\u2220', 'Inclinaison'],
   ['parallel', '\u2225', 'Parallélisme'],
   ['position', '\u2316', 'Position'],
   ['coax', '\u25CE', 'Coaxialité / concentricité'],
@@ -319,6 +319,30 @@ const SPEC_MODIFIER_CHARS = new Map(SPEC_MODIFIERS.map(([id, ch]) => [id, ch]));
 const SPEC_SIZE_MODIFIERS = [['', 'Aucun'], ['LP', 'Taille locale à deux points'],
   ['GG', 'Moindres carrés (Gauss)'], ['GC', 'Minimax (Tchebychev)'],
   ['GN', 'Minimum circonscrit'], ['GX', 'Maximum inscrit']];
+/* Badges de l'indication adjacente : le (E) en un clic et des lettres libres
+   encadrées par un oblong (un cercle s'il n'y a qu'une lettre). Ils suivent le
+   texte de la cote sur la même ligne, dans l'ordre d'ajout. */
+const SPEC_BADGE = { height: 15, font: 10, padX: 5, gap: 4, textFont: '10px Arial, sans-serif' };
+function specBadgeLabel(badge) {
+  if (!badge) return '';
+  return badge.kind === 'E' ? 'E' : String(badge.text || '').trim();
+}
+function specBadgeIsRound(badge) {
+  return !badge || badge.kind === 'E' || specBadgeLabel(badge).length <= 1;
+}
+function specBadgeWidth(badge) {
+  if (specBadgeIsRound(badge)) return SPEC_BADGE.height;
+  return Math.max(SPEC_BADGE.height, textW(specBadgeLabel(badge), SPEC_BADGE.textFont) + 2 * SPEC_BADGE.padX);
+}
+/* Badges affichables (les lettres vides ne sont pas dessinées). */
+function specBadges(spec) {
+  return (spec?.annotation?.badges || []).filter(badge => badge && specBadgeLabel(badge));
+}
+/* « Texte seul » : le cadre et ses indications disparaissent, le texte de la
+   cote reste, souligné, et les liens partent du soulignement. */
+function specTextOnly(spec) {
+  return !!(spec?.annotation?.enabled && spec?.annotation?.textOnly);
+}
 const SPEC_TIPS = [['arrow', 'Flèche'], ['triangle', 'Triangle plein'], ['line', 'Trait simple']];
 const SPEC_TIP_IDS = new Set(SPEC_TIPS.map(([id]) => id));
 function specTip(t) { return SPEC_TIP_IDS.has(t.tip) ? t.tip : 'arrow'; }
@@ -336,7 +360,7 @@ function specFrameLayout(spec) {
   const cells = (spec.cells || []).map(cell => {
     const base = specCellText({ ...cell, mods: [] });
     const mods = (cell.mods || []).filter(id => SPEC_MODIFIER_CHARS.has(id));
-    const baseW = base ? textW(base, m.font) : 0;
+    const baseW = base ? richTextWidth(base, m.fontPx) : 0;
     const modW = m.letter * 1.15;
     const contentW = baseW + mods.length * modW;
     return { text: specCellText(cell), base, mods, baseW, modW, contentW, w: Math.max(minW, contentW + 2 * pad) };
@@ -352,7 +376,7 @@ function specFrameSVG(spec) {
     if (i) s += `<line x1="${r1(x)}" y1="${r1(spec.y)}" x2="${r1(x)}" y2="${r1(spec.y + lay.h)}" stroke="${line}" stroke-width="${ISO_STYLE.strokeFrame}"/>`;
     let cx = x + (cell.w - (cell.contentW || 0)) / 2;
     const cy = spec.y + lay.h / 2;
-    if (cell.base) s += `<text x="${r1(cx)}" y="${r1(cy + lay.letter / 2)}" ${isoTextAttrs(m, false)} fill="${line}">${esc(cell.base)}</text>`;
+    if (cell.base) s += richTextSVG(cell.base, cx, cy + lay.letter / 2, m.fontPx, '', line, false, { anchor: 'start', family: ISO_FONT });
     cx += cell.baseW || 0;
     for (const mod of cell.mods || []) {
       const mid = cx + cell.modW / 2, radius = lay.letter * 0.49 * 1.05;
@@ -367,11 +391,25 @@ function specFrameSVG(spec) {
 function specTargetCenter(t) { return isoTargetCenter(t); }
 function specDefaultElbow(spec, target) {
   const lay = specFrameLayout(spec), c = specTargetCenter(target);
+  if (specTextOnly(spec)) {
+    const box = specAnnotationBox(spec);
+    if (box) return { x: box.x + box.w / 2, y: c ? c.y : box.y + box.h };
+  }
   return { x: spec.x + lay.w / 2, y: c ? c.y : spec.y + lay.h };
 }
 function specTargetElbow(spec, target) {
   const de = specDefaultElbow(spec, target);
   return { x: Number.isFinite(target.elbowX) ? target.elbowX : de.x, y: Number.isFinite(target.elbowY) ? target.elbowY : de.y };
+}
+/* Ancre du rappel sur le cadre : le dernier segment arrive perpendiculairement
+   à l'arête — vertical quand le coude est au-dessous (ou au-dessus), horizontal
+   quand il est sur le côté. */
+function specFrameAnchor(spec, lay, elbow) {
+  const x0 = spec.x, y0 = spec.y, x1 = spec.x + lay.w, y1 = spec.y + lay.h;
+  const ex = Number.isFinite(elbow?.x) ? elbow.x : (x0 + x1) / 2;
+  const ey = Number.isFinite(elbow?.y) ? elbow.y : y1;
+  if (ey > y1 || ey < y0) return { x: clampN(ex, x0, x1), y: ey > y1 ? y1 : y0 };
+  return { x: ex < (x0 + x1) / 2 ? x0 : x1, y: clampN(ey, y0, y1) };
 }
 /* Lien d'un cadre vers une cible : rappel à deux segments + extrémité. */
 function specTargetSVG(spec, target) {
@@ -381,7 +419,7 @@ function specTargetSVG(spec, target) {
   const elbow = specTargetElbow(spec, target);
   const tip = specTip(target);
   const targetPt = isoTargetBoundary(target, elbow) || shape.center;
-  const anchor = rectEdgePoint(spec.x, spec.y, lay.w, lay.h, elbow.x, elbow.y);
+  const anchor = (specTextOnly(spec) && specAnnotationAnchor(spec, elbow)) || specFrameAnchor(spec, lay, elbow);
   let s = `<path d="M${r1(targetPt.x)} ${r1(targetPt.y)} L${r1(elbow.x)} ${r1(elbow.y)} L${r1(anchor.x)} ${r1(anchor.y)}" fill="none" stroke="${line}" stroke-width="${ISO_STYLE.strokeLeader}"/>`;
   s += isoCornerMarkSVG(target.cornerMark, elbow.x, elbow.y);
   if (tip === 'arrow') s += `<polygon points="${isoTipArrow(targetPt.x, targetPt.y, elbow.x, elbow.y, ISO_STYLE.tipArrowLenFactor * m.letter, ISO_STYLE.tipArrowWidthFactor * m.letter)}" fill="${line}"/>`;
@@ -397,44 +435,79 @@ function specAnnotationText(spec) {
   if (a.toleranceMode === 'class') return `${base}${a.toleranceClass || ''}`;
   return base;
 }
-function specAnnotationWidth(spec) {
-  const a = spec.annotation || {};
-  if (!a.enabled) return 0;
+/* Mise en page de l'indication adjacente : texte de la cote, cartouche du
+   modificateur de taille, puis badges (Ⓔ et lettres encadrées) à la suite. */
+function specAnnotationLayout(spec) {
+  const a = spec.annotation || {}; if (!a.enabled) return null;
   const repeat = Math.max(1, Math.floor(Number(a.repeat) || 1));
   const base = `${repeat > 1 ? `${repeat}x ` : ''}${a.diameter || ''}${a.value || ''}`;
   const upper = String(a.toleranceUpper || ''), lower = String(a.toleranceLower || '');
   const suffix = a.toleranceMode === 'symmetric' && upper ? `±${upper}` : a.toleranceMode === 'class' ? String(a.toleranceClass || '') : '';
-  const w = richTextWidth(base + suffix + upper + lower, 12);
-  const hasModifier = SPEC_SIZE_MODIFIERS.some(([id]) => id && id === a.sizeModifier);
-  return w + (hasModifier ? 5 + Math.max(24, textW(a.sizeModifier, '10px Arial, sans-serif') + 10) : 0);
+  const textWidth = richTextWidth(base + suffix + upper + lower, 12);
+  const modifier = SPEC_SIZE_MODIFIERS.some(([id]) => id && id === a.sizeModifier) ? a.sizeModifier : '';
+  const modW = modifier ? Math.max(24, textW(modifier, '10px Arial, sans-serif') + 10) : 0;
+  let cursor = textWidth + (modifier ? 5 + modW : 0);
+  const badges = specBadges(spec).map(badge => {
+    cursor += SPEC_BADGE.gap;
+    const w = specBadgeWidth(badge);
+    const placed = { badge, x: cursor, w };
+    cursor += w;
+    return placed;
+  });
+  return { base, upper, lower, suffix, textWidth, modifier, modW, badges, w: cursor };
+}
+function specAnnotationWidth(spec) {
+  const lay = specAnnotationLayout(spec);
+  return lay ? lay.w : 0;
+}
+/* Boîte de l'indication adjacente, soulignement compris : sert d'ancrage aux
+   liens quand le cadre est masqué (texte seul). */
+function specAnnotationBox(spec) {
+  const lay = specAnnotationLayout(spec); if (!lay) return null;
+  return { x: spec.x + 1, y: spec.y - 15, w: Math.max(1, lay.w), h: 15.5 };
+}
+function specAnnotationAnchor(spec, from) {
+  const box = specAnnotationBox(spec); if (!box) return null;
+  const x = clampN(Number.isFinite(from?.x) ? from.x : box.x + box.w / 2, box.x, box.x + box.w);
+  return { x, y: box.y + box.h };
 }
 function specAnnotationSVG(spec) {
-  const a = spec.annotation || {}; if (!a.enabled) return '';
-  const repeat = Math.max(1, Math.floor(Number(a.repeat) || 1));
-  const base = `${repeat > 1 ? `${repeat}x ` : ''}${a.diameter || ''}${a.value || ''}`;
-  const upper = String(a.toleranceUpper || ''), lower = String(a.toleranceLower || '');
-  const suffix = a.toleranceMode === 'symmetric' && upper ? `±${upper}` : a.toleranceMode === 'class' ? String(a.toleranceClass || '') : '';
-  const approxW = richTextWidth(base + suffix + upper + lower, 12);
+  const a = spec.annotation || {}, lay = specAnnotationLayout(spec); if (!lay) return '';
   const baseX = spec.x + 1, baselineY = spec.y - 4;
-  let content = esc(base);
-  if (a.toleranceMode === 'symmetric' && upper) content += `±${esc(upper)}`;
-  else if (a.toleranceMode === 'asymmetric' && (upper || lower)) {
-    const toleranceX = r1(baseX + textW(base, '12px Arial, sans-serif'));
-    content += `<tspan x="${toleranceX}" baseline-shift="super" font-size="8">+${esc(upper)}</tspan><tspan x="${toleranceX}" baseline-shift="sub" font-size="8">−${esc(lower)}</tspan>`;
+  const annOpts = { anchor: 'start', family: 'Arial, sans-serif' }, annColor = '#17191d';
+  let main = lay.base, tol = '';
+  if (a.toleranceMode === 'symmetric' && lay.upper) main += `±${lay.upper}`;
+  else if (a.toleranceMode === 'class' && a.toleranceClass) main += a.toleranceClass;
+  let out = richTextSVG(main, baseX, baselineY, 12, `data-width="${r1(lay.textWidth)}"`, annColor, false, annOpts);
+  if (a.toleranceMode === 'asymmetric' && (lay.upper || lay.lower)) {
+    const toleranceX = r1(baseX + richTextWidth(lay.base, 12));
+    out += richTextSVG('+' + lay.upper, toleranceX, r1(baselineY - 4), 8, '', annColor, false, { anchor: 'start', family: 'Arial, sans-serif' }) +
+      richTextSVG('−' + lay.lower, toleranceX, r1(baselineY + 2), 8, '', annColor, false, { anchor: 'start', family: 'Arial, sans-serif' });
   }
-  else if (a.toleranceMode === 'class' && a.toleranceClass) content += esc(a.toleranceClass);
-  let out = `<text x="${r1(baseX)}" y="${r1(baselineY)}" font-family="Arial, sans-serif" font-size="12" fill="#17191d" text-anchor="start" data-width="${r1(approxW)}">${content}</text>`;
-  const modifier = SPEC_SIZE_MODIFIERS.some(([id]) => id && id === a.sizeModifier) ? a.sizeModifier : '';
-  if (modifier) {
-    const x = baseX + approxW + 5, y = baselineY - 11, w = Math.max(24, textW(modifier, '10px Arial, sans-serif') + 10);
+  if (lay.modifier) {
+    const x = baseX + lay.w - lay.badges.reduce((sum, b) => sum + b.w + SPEC_BADGE.gap, 0) - lay.modW;
+    const y = baselineY - 11, w = lay.modW;
     out += `<rect x="${r1(x)}" y="${r1(y)}" width="${r1(w)}" height="14" rx="7" fill="#fff" stroke="#17191d" stroke-width="1"/>` +
-      `<text x="${r1(x + w / 2)}" y="${r1(y + 10.5)}" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#17191d">${esc(modifier)}</text>`;
+      `<text x="${r1(x + w / 2)}" y="${r1(y + 10.5)}" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#17191d">${esc(lay.modifier)}</text>`;
   }
+  /* Badges : Ⓔ (un clic) et lettres libres — cercle pour une lettre, oblong au-delà. */
+  for (const { badge, x, w } of lay.badges) {
+    const bx = baseX + x, cy = baselineY - 4, h = SPEC_BADGE.height, label = specBadgeLabel(badge);
+    if (specBadgeIsRound(badge)) {
+      out += `<circle cx="${r1(bx + w / 2)}" cy="${r1(cy)}" r="${r1(w / 2)}" fill="#fff" stroke="#17191d" stroke-width="1"/>` +
+        `<text x="${r1(bx + w / 2)}" y="${r1(cy + 3.5)}" text-anchor="middle" font-family="Arial, sans-serif" font-size="${SPEC_BADGE.font}" fill="#17191d">${esc(label)}</text>`;
+    } else {
+      out += `<rect x="${r1(bx)}" y="${r1(cy - h / 2)}" width="${r1(w)}" height="${h}" rx="${r1(h / 2)}" fill="#fff" stroke="#17191d" stroke-width="1"/>` +
+        `<text x="${r1(bx + w / 2)}" y="${r1(cy + 3.5)}" text-anchor="middle" font-family="Arial, sans-serif" font-size="${SPEC_BADGE.font}" fill="#17191d">${esc(label)}</text>`;
+    }
+  }
+  /* Texte seul : le texte entier est souligné, c'est de là que partent les liens. */
+  if (a.textOnly) out += `<path d="M${r1(spec.x + 1)} ${r1(spec.y + 0.5)}H${r1(spec.x + 1 + lay.w)}" fill="none" stroke="#17191d" stroke-width="1"/>`;
   return out;
 }
 const SPEC_COMPLEMENT_SYMBOLS = [
   ['sym', '\u232F', 'Symétrie'], ['para', '\u2225', 'Parallélisme'],
-  ['perpen', '\u27C2', 'Perpendicularité'], ['angle', '\u2220', 'Angulosité']
+  ['perpen', '\u27C2', 'Perpendicularité'], ['angle', '\u2220', 'Inclinaison']
 ];
 const SPEC_COMPLEMENT_CHARS = new Map(SPEC_COMPLEMENT_SYMBOLS.map(([id, ch]) => [id, ch]));
 function specComplementaryCellSVG(spec, id, x) {
@@ -443,11 +516,11 @@ function specComplementaryCellSVG(spec, id, x) {
   const symbol = SPEC_COMPLEMENT_CHARS.get(data.sym) || SPEC_COMPLEMENT_CHARS.get('sym');
   const text = String(data.text || ''), pad = ISO_STYLE.framePadFactor * m.letter;
   const symW = Math.max(ISO_STYLE.frameWFactor * m.letter, textW(symbol, m.font) + 2 * pad);
-  const textWpx = text ? textW(text, m.font) + 2 * pad : ISO_STYLE.frameWFactor * m.letter;
+  const textWpx = text ? richTextWidth(text, m.fontPx) + 2 * pad : ISO_STYLE.frameWFactor * m.letter;
   const w = symW + textWpx, y = spec.y, line = '#17191d';
   let out = `<rect x="${r1(x)}" y="${r1(y)}" width="${r1(w)}" height="${r1(h)}" fill="#fff" stroke="${line}" stroke-width="${ISO_STYLE.strokeFrame}"/><line x1="${r1(x + symW)}" y1="${r1(y)}" x2="${r1(x + symW)}" y2="${r1(y + h)}" stroke="${line}" stroke-width="${ISO_STYLE.strokeFrame}"/>`;
   out += `<text x="${r1(x + symW / 2)}" y="${r1(y + h / 2 + m.letter / 2)}" text-anchor="middle" ${isoTextAttrs(m, false)} fill="${line}">${esc(symbol)}</text>`;
-  if (text) out += `<text x="${r1(x + symW + textWpx / 2)}" y="${r1(y + h / 2 + m.letter / 2)}" text-anchor="middle" ${isoTextAttrs(m, false)} fill="${line}">${esc(text)}</text>`;
+  if (text) out += richTextSVG(text, x + symW + textWpx / 2, y + h / 2 + m.letter / 2, m.fontPx, '', line, false, { family: ISO_FONT });
   return { svg: out, w };
 }
 function specSupplementarySVG(spec) {
@@ -485,8 +558,10 @@ function specSupplementaryWidth(spec) {
   }, 0);
 }
 function specSVG(spec) {
+  const textOnly = specTextOnly(spec);
   const leaders = (spec.targets || []).map(t => specTargetSVG(spec, t)).join('');
-  return `<g data-id="${spec.id}" data-kind="isoSpec" style="cursor:move"><title>Cadre de tolérance — glisser pour déplacer, double-clic pour modifier</title>${leaders}${specFrameSVG(spec)}${specAnnotationSVG(spec)}${specSupplementarySVG(spec)}</g>`;
+  const body = `${leaders}${textOnly ? '' : specFrameSVG(spec)}${specAnnotationSVG(spec)}${textOnly ? '' : specSupplementarySVG(spec)}`;
+  return `<g data-id="${spec.id}" data-kind="isoSpec" style="cursor:move"><title>Cadre de tolérance — glisser pour déplacer, double-clic pour modifier</title>${body}</g>`;
 }
 /* Une spécification peut être libre ou liée aux composants d'une seule pièce. */
 function createSpec(targetIds) {
@@ -502,7 +577,7 @@ function createSpec(targetIds) {
   const spec = {
     id: uid(), ownerPieceId, x: x0, y: y0,
     cells: [{ sym: 'position', text: '', mods: [] }, { sym: '', text: '0,05', mods: [] }],
-    annotation: { enabled: false, repeat: 1, diameter: '', value: '', toleranceMode: 'none', toleranceUpper: '', toleranceLower: '', toleranceClass: '', supplementary: [], complementaryData: {} },
+    annotation: { enabled: false, repeat: 1, diameter: '', value: '', toleranceMode: 'none', toleranceUpper: '', toleranceLower: '', toleranceClass: '', supplementary: [], complementaryData: {}, badges: [], textOnly: false },
     targets: targets.map(target => ({ ...target, tip: 'arrow' }))
   };
   spec.targets.forEach(target => {
@@ -515,10 +590,11 @@ function createSpec(targetIds) {
 }
 /* ===== Éditeur des cadres de tolérance (panneau de droite et fenêtre) ===== */
 function specPreviewHTML(spec) {
-  const lay = specFrameLayout(spec), supplementary = specSupplementarySVG(spec);
-  const extra = specSupplementaryWidth(spec);
+  const lay = specFrameLayout(spec), textOnly = specTextOnly(spec);
+  const supplementary = textOnly ? '' : specSupplementarySVG(spec);
+  const extra = textOnly ? 0 : specSupplementaryWidth(spec);
   const width = Math.max(lay.w + extra, specAnnotationWidth(spec) + 1);
-  return `<div class="spec-preview"><svg viewBox="${r1(spec.x - 8)} ${r1(spec.y - 24)} ${r1(width + 16)} ${r1(lay.h + 32)}">${specFrameSVG(spec)}${specAnnotationSVG(spec)}${supplementary}</svg></div>`;
+  return `<div class="spec-preview"><svg viewBox="${r1(spec.x - 8)} ${r1(spec.y - 24)} ${r1(width + 16)} ${r1(lay.h + 32)}">${textOnly ? '' : specFrameSVG(spec)}${specAnnotationSVG(spec)}${supplementary}</svg></div>`;
 }
 const SPEC_COMPLEMENTARY_INDICATORS = [
   ['intersection', 'Indicateur de plan d’intersection'],
@@ -543,6 +619,27 @@ function specTargetLabel(t) {
   if (t.targetKind === 'piece') { const p = P(t.targetId); return p ? `${p.name} (${p.num})` : 'pièce supprimée'; }
   if (t.targetKind === 'surface') { const s = SF(t.targetId); return s ? sname(s) : 'cible supprimée'; }
   const g = G(t.targetId); return g ? (g.name || 'Référence') : 'cible supprimée';
+}
+function specBadgesEditorHTML(spec) {
+  const ann = spec.annotation || {}, list = ann.badges || [];
+  const rows = list.map((badge, i) => `
+      <div class="spec-badge-row">
+        <button type="button" data-spec-badge-act="left" data-i="${i}" title="Déplacer à gauche"${i ? '' : ' disabled'}>◀</button>
+        ${badge.kind === 'E'
+          ? '<span class="spec-badge-chip" title="E encerclé (principe d’enveloppe)">E</span>'
+          : `<input type="text" data-spec-badge="${i}" value="${esc(badge.text || '')}" placeholder="…" maxlength="8" aria-label="Lettres encadrées">`}
+        <button type="button" data-spec-badge-act="right" data-i="${i}" title="Déplacer à droite"${i < list.length - 1 ? '' : ' disabled'}>▶</button>
+        <button type="button" data-spec-badge-act="del" data-i="${i}" class="danger" title="Supprimer">✕</button>
+      </div>`).join('');
+  return `
+    <div class="spec-badges">
+      ${rows}
+      <span class="spec-badge-new">
+        <button type="button" data-spec-badge-new="E" title="Ajouter le symbole (E) en un clic">Ⓔ E</button>
+        <input type="text" data-spec-badge-input placeholder="lettres" maxlength="8" aria-label="Lettres à encadrer">
+        <button type="button" data-spec-badge-new="text" title="Ajouter ces lettres dans un cercle ou un oblong">＋</button>
+      </span>
+    </div>`;
 }
 function specEditorHTML(spec) {
   const cells = (spec.cells || []).map((c, i) => `
@@ -572,24 +669,28 @@ function specEditorHTML(spec) {
     </div>`).join('');
   const ann = spec.annotation || { enabled: false, repeat: 1, diameter: '', value: '', toleranceMode: 'none', toleranceUpper: '', toleranceLower: '', toleranceClass: '', supplementary: [], complementaryData: {} };
   const toleranceMode = ann.toleranceMode || 'none';
+  const textOnly = !!ann.textOnly;
   const annotationEditor = `
-    <h4>Spécification adjacente</h4>
-    <label class="spec-ann-enable"><input type="checkbox" data-spec-ann="enabled" ${ann.enabled ? 'checked' : ''}> Afficher la spécification adjacente</label>
+    <h4 class="spec-head-row">Spécification adjacente
+      <label class="spec-toggle" title="Afficher ou masquer la cote au-dessus du cadre"><input type="checkbox" data-spec-ann="enabled" ${ann.enabled ? 'checked' : ''}> Afficher</label>
+    </h4>
     <div class="spec-ann-fields">
       <label>Répétitions <input type="number" min="1" step="1" data-spec-ann="repeat" value="${Math.max(1, Number(ann.repeat) || 1)}"></label>
       <label>Diamètre <select data-spec-ann="diameter" aria-label="Symbole de diamètre">${[['','Aucun'],['Ø','Ø']].map(([v,l])=>`<option value="${esc(v)}" ${ann.diameter===v?'selected':''}>${l}</option>`).join('')}</select></label>
       <label>Texte <input type="text" data-spec-ann="value" value="${esc(ann.value || '')}" placeholder="ex. 5" aria-label="Texte de spécification"></label>
-      <label>Modificateur de taille <select data-spec-ann="sizeModifier" aria-label="Modificateur de taille">${SPEC_SIZE_MODIFIERS.map(([id, label]) => `<option value="${id}" ${(ann.sizeModifier || '') === id ? 'selected' : ''}>${id ? id + ' — ' : ''}${esc(label)}</option>`).join('')}</select></label>
-      <label>Tolérance <select data-spec-ann="toleranceMode" aria-label="Type de tolérance">${[['none','Aucune'],['symmetric','± même valeur'],['asymmetric','+ / − valeurs différentes'],['class','Classe (ex. E6)']].map(([v,l])=>`<option value="${v}" ${toleranceMode===v?'selected':''}>${l}</option>`).join('')}</select></label>
+      <label>Modificateur <select data-spec-ann="sizeModifier" aria-label="Modificateur de taille">${SPEC_SIZE_MODIFIERS.map(([id, label]) => `<option value="${id}" ${(ann.sizeModifier || '') === id ? 'selected' : ''}>${id ? id + ' — ' : ''}${esc(label)}</option>`).join('')}</select></label>
+      <label>Tolérance <select data-spec-ann="toleranceMode" aria-label="Type de tolérance">${[['none','Aucune'],['symmetric','± même valeur'],['asymmetric','+ / − différentes'],['class','Classe (ex. E6)']].map(([v,l])=>`<option value="${v}" ${toleranceMode===v?'selected':''}>${l}</option>`).join('')}</select></label>
       ${toleranceMode === 'symmetric' ? `<label>± <input type="text" data-spec-ann="toleranceUpper" value="${esc(ann.toleranceUpper || '')}" placeholder="0,1"></label>` : ''}
       ${toleranceMode === 'asymmetric' ? `<label>Exposant (+) <input type="text" data-spec-ann="toleranceUpper" value="${esc(ann.toleranceUpper || '')}" placeholder="0,1"></label><label>Indice (−) <input type="text" data-spec-ann="toleranceLower" value="${esc(ann.toleranceLower || '')}" placeholder="0,0"></label>` : ''}
       ${toleranceMode === 'class' ? `<label>Classe <input type="text" data-spec-ann="toleranceClass" value="${esc(ann.toleranceClass || '')}" placeholder="E6"></label>` : ''}
-    </div>`;
+    </div>
+    ${specBadgesEditorHTML(spec)}`;
   return `
     ${specPreviewHTML(spec)}
     ${annotationEditor}
-    <h4>Sections du cadre</h4>
-    <p class="muted">Choisissez un symbole et un texte, puis activez les indicateurs encerclés souhaités.</p>
+    <h4 class="spec-head-row">Sections du cadre
+      <button type="button" class="spec-toggle spec-eye${textOnly ? ' active' : ''}" data-spec-textonly aria-pressed="${textOnly}" title="Masquer le cadre et les indications : le texte reste, souligné, et les liens partent du soulignement">👁 ${textOnly ? 'Afficher le cadre' : 'Cacher le cadre'}</button>
+    </h4>
     ${cells}
     <div class="btns"><button type="button" data-spec-cell-act="add">＋ Section</button></div>
     <h4>Indications complémentaires</h4>
@@ -630,7 +731,7 @@ function wireSpecEditor(root, spec, redraw) {
       if (!cp) { checkpoint(); cp = true; }
       spec.annotation = spec.annotation || { enabled: false, repeat: 1, diameter: '', value: '', toleranceMode: 'none', toleranceUpper: '', toleranceLower: '', toleranceClass: '', supplementary: [], complementaryData: {} };
       const key = inp.dataset.specAnn;
-      spec.annotation[key] = key === 'enabled' ? inp.checked : key === 'repeat' ? Math.max(1, Math.floor(Number(inp.value) || 1)) : inp.value;
+      spec.annotation[key] = inp.type === 'checkbox' ? inp.checked : key === 'repeat' ? Math.max(1, Math.floor(Number(inp.value) || 1)) : inp.value;
       if (key === 'repeat') inp.value = spec.annotation.repeat;
       if (key === 'toleranceMode' || key === 'sizeModifier') { changed(); if (redraw) redraw(); return; }
       render(); autosave(); redrawPreview();
@@ -660,6 +761,44 @@ function wireSpecEditor(root, spec, redraw) {
       spec.annotation.complementaryData = spec.annotation.complementaryData || {};
       spec.annotation.complementaryData[id] = spec.annotation.complementaryData[id] || { sym: 'sym', text: '' };
     }
+  })));
+  const badgeInit = () => {
+    spec.annotation = spec.annotation || { enabled: false, repeat: 1, diameter: '', value: '', toleranceMode: 'none', toleranceUpper: '', toleranceLower: '', toleranceClass: '', supplementary: [], complementaryData: {}, badges: [], textOnly: false };
+    spec.annotation.badges = spec.annotation.badges || [];
+    return spec.annotation.badges;
+  };
+  $$('[data-spec-badge-new]', root).forEach(btn => btn.addEventListener('click', () => {
+    if (btn.dataset.specBadgeNew === 'E') {
+      if ((spec.annotation?.badges || []).some(b => b.kind === 'E')) { toast('Le (E) est déjà présent.'); return; }
+      structural(() => badgeInit().push({ id: uid(), kind: 'E' }));
+      return;
+    }
+    const input = $('[data-spec-badge-input]', root), text = (input?.value || '').trim();
+    if (!text) { toast('Saisissez les lettres à encadrer (ex. SX).'); input?.focus(); return; }
+    structural(() => badgeInit().push({ id: uid(), kind: 'text', text }));
+  }));
+  $$('[data-spec-badge]', root).forEach(inp => {
+    let cp = false;
+    inp.addEventListener('focus', () => cp = false);
+    inp.addEventListener('input', () => {
+      if (!cp) { checkpoint(); cp = true; }
+      const badge = (spec.annotation?.badges || [])[+inp.dataset.specBadge]; if (!badge) return;
+      badge.text = inp.value;
+      render(); autosave(); redrawPreview();
+    });
+  });
+  $$('[data-spec-badge-act]', root).forEach(btn => btn.addEventListener('click', () => {
+    const act = btn.dataset.specBadgeAct, i = +btn.dataset.i;
+    structural(() => {
+      const list = badgeInit(); if (!list[i]) return;
+      if (act === 'del') list.splice(i, 1);
+      else if (act === 'left' && i > 0) list.splice(i - 1, 0, list.splice(i, 1)[0]);
+      else if (act === 'right' && i < list.length - 1) list.splice(i + 1, 0, list.splice(i, 1)[0]);
+    });
+  }));
+  $$('[data-spec-textonly]', root).forEach(btn => btn.addEventListener('click', () => structural(() => {
+    spec.annotation = spec.annotation || { enabled: false, repeat: 1, diameter: '', value: '', toleranceMode: 'none', toleranceUpper: '', toleranceLower: '', toleranceClass: '', supplementary: [], complementaryData: {}, badges: [], textOnly: false };
+    spec.annotation.textOnly = !spec.annotation.textOnly;
   })));
   $$('[data-spec-mod]', root).forEach(btn => btn.addEventListener('click', () => structural(() => {
     const c = spec.cells[+btn.dataset.specMod]; if (!c) return;

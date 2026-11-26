@@ -51,8 +51,15 @@ function migrateCFs(s) {
   const taken = new Set(), names = new Set();
   for (const c of s.cfgs) {
     if (c.dedicated) {
-      const a = s.surfaces.find(f => f.id === c.a), b = s.surfaces.find(f => f.id === c.b);
-      if (!a || !b || a.pieceId === b.pieceId) throw new Error('Une CF doit avoir deux surfaces sur deux pièces différentes.');
+      const pieceOf = id => {
+        const f = s.surfaces.find(x => x.id === id); if (f) return f.pieceId;
+        const g = s.groups.find(x => x.id === id && x.kind === 'ref');
+        if (g) { const m = g.members.map(mid => s.surfaces.find(x => x.id === mid)).find(Boolean); return m ? m.pieceId : null; }
+        return null;
+      };
+      const pa = pieceOf(c.a), pb = pieceOf(c.b);
+      if (!pa || !pb) throw new Error('Une CF doit relier deux surfaces ou groupes de référence existants.');
+      if (pa === pb) throw new Error('Une CF doit relier deux pièces différentes.');
     }
     if (c.name != null && typeof c.name !== 'string') throw new Error('Le nom de la CF doit être un texte.');
     const inferred = Number(String(c.name || '').match(/\d+/)?.[0]);
@@ -91,15 +98,16 @@ function migrateCFs(s) {
   }
 }
 
+const cfEndValid = id => !!(SF(id) || refGroupOf(id));
 function createCF(aId, bId, name = nextCFName(), details = {}) {
-  const sa = SF(aId), sb = SF(bId);
-  if (!sa || !sb || sa.pieceId === sb.pieceId) throw new Error('Une CF nécessite deux surfaces sur deux pièces différentes.');
+  if (!cfEndValid(aId) || !cfEndValid(bId) || endPiece(aId) === endPiece(bId))
+    throw new Error('Une CF nécessite deux extrémités (surface ou groupe de référence) sur deux pièces différentes.');
   name = String(name).trim();
   const err = cfNameError(name);
   if (err) throw new Error(err);
   const c = { id: uid(), a: aId, b: bId, num: nextCFNum(), name, color: '#b42318', inColor: true, dedicated: true, labelBox: false,
     details: { point: String(details.point || '').trim(), normale: String(details.normale || '').trim() } };
-  [sa, sb].forEach(s => { s.stroke = c.color; });
+  [aId, bId].forEach(id => { const s = SF(id); if (s) s.stroke = c.color; });
   S().cfgs.push(c);
   return c;
 }
@@ -115,15 +123,21 @@ function cfDialog(pidA, pidB, editId, pre = {}) {
   const c = editId ? C(editId) : null, A = P(pidA), B = P(pidB);
   if (!A || !B || A.id === B.id) return toast('Choisissez deux pièces différentes pour la CF.');
   const sa = c && SF(c.a), sb = c && SF(c.b);
-  /* Surfaces déjà choisies en cliquant dessus sur le graphe (clic sur une surface). */
-  const preA = !c && pre.a && SF(pre.a) && SF(pre.a).pieceId === A.id ? SF(pre.a) : null;
-  const preB = !c && pre.b && SF(pre.b) && SF(pre.b).pieceId === B.id ? SF(pre.b) : null;
-  const exA = sa || preA, exB = sb || preB;
+  /* Extrémité déjà fixée : surface existante, groupe de référence (référence ISO)
+     ou surface cliquée sur le graphe. */
+  const preEnd = (id, piece) => {
+    if (!id) return null;
+    const s = SF(id); if (s && s.pieceId === piece.id) return { kind: 'ex', id: s.id, count: s.count || 1 };
+    const g = refGroupOf(id); if (g && endPiece(g.id) === piece.id) return { kind: 'grp', id: g.id, count: 1 };
+    return null;
+  };
+  const endA = c ? preEnd(c.a, A) : preEnd(pre.a, A);
+  const endB = c ? preEnd(c.b, B) : preEnd(pre.b, B);
   const det = Object.assign({ point: '', normale: '' }, c && c.details ? clone(c.details) : {});
   const normMode = ['x', 'y', 'z'].includes(det.normale) ? det.normale : det.normale ? 'custom' : 'none';
   const state = {
-    sa: exA ? 'ex:' + exA.id : 'new:PL', sb: exB ? 'ex:' + exB.id : 'new:PL',
-    countA: exA ? exA.count || 1 : 1, countB: exB ? exB.count || 1 : 1,
+    sa: endA ? endA.kind + ':' + endA.id : 'new:PL', sb: endB ? endB.kind + ':' + endB.id : 'new:PL',
+    countA: endA ? endA.count : 1, countB: endB ? endB.count : 1,
     nameA: '', nameB: ''
   };
   const surfOptions = (p, val) => {
@@ -133,7 +147,9 @@ function cfDialog(pidA, pidB, editId, pre = {}) {
         const others = cfOfSurfaceList(s.id).filter(f => f.id !== c?.id).map(f => cfDisplayName(f));
         return `<option value="ex:${s.id}" ${val === 'ex:' + s.id ? 'selected' : ''}>${esc(sname(s))}${others.length ? ' — ' + esc(others.join(', ')) : ''}</option>`;
       }).join('');
-    return `<optgroup label="Nouvelle surface">${news}</optgroup>${ex ? `<optgroup label="Surfaces existantes">${ex}</optgroup>` : ''}`;
+    const grps = S().groups.filter(g => g.kind === 'ref' && endPiece(g.id) === p.id)
+      .map(g => `<option value="grp:${g.id}" ${val === 'grp:' + g.id ? 'selected' : ''}>${esc(g.name || 'Référence')} — groupe de ${g.members.length} surface(s)</option>`).join('');
+    return `<optgroup label="Nouvelle surface">${news}</optgroup>${ex ? `<optgroup label="Surfaces existantes">${ex}</optgroup>` : ''}${grps ? `<optgroup label="Groupes de référence">${grps}</optgroup>` : ''}`;
   };
   const pieceBox = (p, id) => { const d = $(id, body); d.style.background = p.color; d.style.color = textOn(p.color); d.innerHTML = esc(p.name).replace(/\n/g, '<br>'); };
   const body = el(`<div style="width:560px">
@@ -141,9 +157,9 @@ function cfDialog(pidA, pidB, editId, pre = {}) {
     <div class="row"><label>Nom de la CF</label><input id="cfName" type="text" value="${esc(c ? cfName(c) : nextCFName())}" autofocus placeholder="Texte, nombre ou vide"></div>
     <div class="ld-grid">
       <label><span class="chip" id="cfChipA"></span></label>
-      <div class="surface-choice"><select data-side="sa">${surfOptions(A, state.sa)}</select><label class="surface-repeat" title="Répétitions de la surface A">× <input aria-label="Répétitions surface A" type="number" min="1" step="1" data-scount="countA" value="${state.countA}"></label><input type="text" class="surface-name" data-sname="nameA" value="${esc(state.nameA)}" placeholder="Nom libre (facultatif)" title="Texte libre affiché sur la bulle à la place de la nomenclature automatique ; vide = nom automatique" aria-label="Nom libre de la surface A" ${state.sa.startsWith('new:') ? '' : 'hidden'}></div>
+      <div class="surface-choice"><select data-side="sa">${surfOptions(A, state.sa)}</select><label class="surface-repeat" title="Répétitions de la surface A" ${state.sa.startsWith('grp:') ? 'style="display:none"' : ''}>× <input aria-label="Répétitions surface A" type="number" min="1" step="1" data-scount="countA" value="${state.countA}"></label><input type="text" class="surface-name" data-sname="nameA" value="${esc(state.nameA)}" placeholder="Nom libre (facultatif)" title="Texte libre affiché sur la bulle à la place de la nomenclature automatique ; vide = nom automatique" aria-label="Nom libre de la surface A" ${state.sa.startsWith('new:') ? '' : 'hidden'}></div>
       <label><span class="chip" id="cfChipB"></span></label>
-      <div class="surface-choice"><select data-side="sb">${surfOptions(B, state.sb)}</select><label class="surface-repeat" title="Répétitions de la surface B">× <input aria-label="Répétitions surface B" type="number" min="1" step="1" data-scount="countB" value="${state.countB}"></label><input type="text" class="surface-name" data-sname="nameB" value="${esc(state.nameB)}" placeholder="Nom libre (facultatif)" title="Texte libre affiché sur la bulle à la place de la nomenclature automatique ; vide = nom automatique" aria-label="Nom libre de la surface B" ${state.sb.startsWith('new:') ? '' : 'hidden'}></div>
+      <div class="surface-choice"><select data-side="sb">${surfOptions(B, state.sb)}</select><label class="surface-repeat" title="Répétitions de la surface B" ${state.sb.startsWith('grp:') ? 'style="display:none"' : ''}>× <input aria-label="Répétitions surface B" type="number" min="1" step="1" data-scount="countB" value="${state.countB}"></label><input type="text" class="surface-name" data-sname="nameB" value="${esc(state.nameB)}" placeholder="Nom libre (facultatif)" title="Texte libre affiché sur la bulle à la place de la nomenclature automatique ; vide = nom automatique" aria-label="Nom libre de la surface B" ${state.sb.startsWith('new:') ? '' : 'hidden'}></div>
       <label>Détails <span class="muted">(facultatif)</span></label>
       <div class="dets">
         <label title="Point / centre">pt</label><input type="text" data-det="point" value="${esc(det.point)}" placeholder="—" title="Point / centre (facultatif), ex. A, O">
@@ -151,7 +167,7 @@ function cfDialog(pidA, pidB, editId, pre = {}) {
       </div>
     </div>
     <label><input id="cfLabelBox" type="checkbox" ${c?.labelBox ? 'checked' : ''}> Encadrer le libellé sur le trait</label>
-    <p class="muted">Deux surfaces entre les deux pièces : surfaces existantes ou nouvelles. Une surface existante peut servir à plusieurs CF ; son nom affiche alors les autres CF déjà reliées. Le nom est libre et unique dans la feuille, y compris le nom vide (une seule CF sans nom). Point et normale sont affichés avec le détail des liaisons.</p>
+    <p class="muted">Deux extrémités entre les deux pièces : surface existante, nouvelle surface ou groupe de référence (référence ISO), dont le lien s'accroche au contour du groupe. Une surface existante peut servir à plusieurs CF ; son nom affiche alors les autres CF déjà reliées. Le nom est libre et unique dans la feuille, y compris le nom vide (une seule CF sans nom). Point et normale sont affichés avec le détail des liaisons.</p>
     <div class="err" id="cfErr"></div></div>`);
   pieceBox(A, '#cfA'); pieceBox(B, '#cfB');
   $('#cfChipA', body).style.background = A.color; $('#cfChipA', body).style.color = textOn(A.color); $('#cfChipA', body).innerHTML = esc(A.name).replace(/\n/g, '<br>');
@@ -164,6 +180,8 @@ function cfDialog(pidA, pidB, editId, pre = {}) {
       const key = t.dataset.side === 'sa' ? 'countA' : 'countB';
       state[key] = t.value.startsWith('ex:') ? SF(t.value.slice(3)).count || 1 : 1;
       $(`[data-scount="${key}"]`, body).value = state[key];
+      const rep = $(`[data-scount="${key}"]`, body)?.closest('.surface-repeat');
+      if (rep) rep.style.display = t.value.startsWith('grp:') ? 'none' : '';
       const nameInp = $(`[data-sname="${t.dataset.side === 'sa' ? 'nameA' : 'nameB'}"]`, body);
       if (nameInp) nameInp.hidden = !t.value.startsWith('new:');
     }
@@ -184,26 +202,27 @@ function cfDialog(pidA, pidB, editId, pre = {}) {
         if (!normale) { $('#cfNormCustom', body).classList.add('invalid'); $('#cfErr', body).textContent = 'Précisez la direction personnalisée ou choisissez x, y ou z.'; return false; }
       } else if (mode !== 'none') normale = mode;
       const point = $('[data-det="point"]', body).value.trim();
-      if (state.sa.startsWith('ex:') && state.sa === state.sb) { $('#cfErr', body).textContent = 'Les deux extrémités ne peuvent pas utiliser la même surface.'; return false; }
+      if (state.sa === state.sb && !state.sa.startsWith('new:')) { $('#cfErr', body).textContent = 'Les deux extrémités ne peuvent pas être identiques.'; return false; }
       const plannedSurfaces = [];
-      const surface = (val, p) => {
-        if (val.startsWith('ex:')) return val.slice(3);
+      const endId = (val, p) => {
+        if (val.startsWith('ex:') || val.startsWith('grp:')) return val.slice(val.indexOf(':') + 1);
         const f = { id: uid(), pieceId: p.id }; plannedSurfaces.push(f); return f.id;
       };
-      const plannedLinks = [{ id: c ? c.id : uid(), kind: 'cfg', a: surface(state.sa, A), b: surface(state.sb, B) }];
+      const plannedLinks = [{ id: c ? c.id : uid(), kind: 'cfg', a: endId(state.sa, A), b: endId(state.sb, B) }];
       const layoutError = referenceCreationError(plannedSurfaces, plannedLinks, c ? [c.id] : []);
       if (layoutError) { $('#cfErr', body).textContent = layoutError; return false; }
       checkpoint();
       const angAB = Math.atan2(B.y - A.y, B.x - A.x);
       const resolve = (val, p, ang, custom) => {
-        if (val.startsWith('ex:')) return val.slice(3);
+        if (val.startsWith('ex:') || val.startsWith('grp:')) return val.slice(val.indexOf(':') + 1);
         const id = createSurface(p.id, val.slice(4), null, ang).id;
         const nm = String(custom || '').trim();
         if (nm) SF(id).name = nm;
         return id;
       };
       const aId = resolve(state.sa, A, angAB, state.nameA), bId = resolve(state.sb, B, angAB + Math.PI, state.nameB);
-      SF(aId).count = countA; SF(bId).count = countB;
+      if (SF(aId)) SF(aId).count = countA;
+      if (SF(bId)) SF(bId).count = countB;
       let cf = c;
       if (cf) Object.assign(cf, { a: aId, b: bId, name, details: { point, normale } });
       else cf = createCF(aId, bId, name, { point, normale });
@@ -215,8 +234,8 @@ function cfDialog(pidA, pidB, editId, pre = {}) {
 }
 function cfListPanel() {
   const cs = S().cfgs;
-  return `<h3>CF</h3><p class="muted">Cliquer sur deux pièces, ou directement sur deux surfaces (une par pièce), pour créer une CF : chaque extrémité est alors la surface cliquée ou une nouvelle surface. Les modes noir / couleur ne changent pas sa couleur enregistrée.</p>
-    ${pick.length === 1 && (SF(pick[0]) || P(pick[0])) ? `<p>Première extrémité : <b>${esc(endName(pick[0]))}</b>. Choisir la deuxième sur une autre pièce.</p>` : ''}
+  return `<h3>CF</h3><p class="muted">Cliquer sur deux pièces, deux surfaces ou deux groupes de référence (une extrémité par pièce) pour créer une CF : chaque extrémité est alors l'élément cliqué ou une nouvelle surface. Les modes noir / couleur ne changent pas sa couleur enregistrée.</p>
+    ${pick.length === 1 && (SF(pick[0]) || P(pick[0]) || G(pick[0])) ? `<p>Première extrémité : <b>${esc(endName(pick[0]))}</b>. Choisir la deuxième sur une autre pièce.</p>` : ''}
     <h4>CF existantes (${cs.length})</h4>
     <div class="btns"><button data-cfa="blackall" ${cs.length ? '' : 'disabled'}>Toutes en noir</button><button data-cfa="colorall" ${cs.length ? '' : 'disabled'}>Toutes en couleur</button></div>
     ${cs.map(c => `<div class="cycle-card" data-cf="${c.id}">
@@ -233,7 +252,7 @@ function cfListAction(action, id) {
     checkpoint(); S().cfgs.forEach(c => c.inColor = action === 'colorall'); changed(); return;
   }
   if (action === 'properties' && c) { setTool('select'); sel.clear(); sel.add(c.id); changed(); return; }
-  if (action === 'edit' && c) return cfDialog(SF(c.a).pieceId, SF(c.b).pieceId, c.id);
+  if (action === 'edit' && c) return cfDialog(endPiece(c.a), endPiece(c.b), c.id);
   if (action === 'delete' && c) return askConfirm('Supprimer la CF', `Supprimer « ${esc(cfDisplayName(c))} », ses surfaces devenues inutiles et les cycles associés ?`, () => {
     checkpoint(); deleteIds([c.id]); sel.clear(); changed();
   });
@@ -292,46 +311,69 @@ function cycleContents(c, s = S()) {
   }
   for (const l of s.liaisons.filter(l => links.has(l.id))) { surfaces.add(l.a); surfaces.add(l.b); }
   const cf = s.cfgs.find(cf => cf.id === c.cfId);
-  if (cf) { cfs.add(cf.id); surfaces.add(cf.a); surfaces.add(cf.b); }
+  if (cf) {
+    cfs.add(cf.id);
+    for (const id of [cf.a, cf.b]) {
+      if (s.surfaces.some(f => f.id === id)) surfaces.add(id);
+      else {
+        const g = s.groups.find(x => x.id === id && x.kind === 'ref');
+        if (g) { references.add(g.id); g.members.forEach(m => { surfaces.add(m); covered.add(m); }); }
+      }
+    }
+  }
   return { surfaces, references, links, covered, cfs };
 }
 function visibleCycleContents(cycles, s = S()) {
   const result = { surfaces: new Set(), references: new Set(), links: new Set(), covered: new Set(), cfs: new Set(),
-    colors: { surfaces: new Map(), references: new Map(), links: new Map() } };
+    colors: { surfaces: new Map(), references: new Map(), links: new Map() }, linksBy: new Map() };
   for (const c of cycles) {
     const contents = cycleContents(c, s);
     for (const key of ['surfaces', 'references', 'links', 'cfs']) contents[key].forEach(id => result[key].add(id));
     for (const key of ['surfaces', 'references', 'links']) contents[key].forEach(id => result.colors[key].set(id, c.color || DEFAULT_CYCLE_COLOR));
+    contents.links.forEach(id => {
+      const list = result.linksBy.get(id) || (result.linksBy.set(id, []), result.linksBy.get(id));
+      if (!list.includes(c)) list.push(c);
+    });
     contents.surfaces.forEach(id => { if (contents.covered.has(id)) result.covered.add(id); else result.covered.delete(id); });
   }
   return result;
 }
+/* Connexions internes d'un cycle : le parcours est suivi pas à pas et, sur
+   chaque pièce, les points d'attache successifs (surfaces concrètes) sont
+   reliés deux à deux dans l'ordre du parcours. Un groupe de surfaces est
+   traversé par ses membres : le cycle reste visiblement fermé dans la pièce,
+   y compris quand il entre et ressort par les contacts d'une référence. */
 function cycleInternalConnections(c, s = S()) {
-  const result = new Map(), refs = c.nodes.map(id => s.groups.find(g => g.id === id && g.kind === 'ref')).filter(Boolean);
   const surface = id => s.surfaces.find(f => f.id === id);
-  const entity = (id, pieceId) => {
-    const f = surface(id);
-    if (f) return f.pieceId === pieceId ? refs.find(g => g.members.includes(id))?.id || id : null;
-    return nodeSurfaces(id, s).some(f => f.pieceId === pieceId) ? id : null;
+  const byPiece = new Map(); // pieceId -> [surfaceId, …] dans l'ordre du parcours
+  const touch = f => {
+    if (!f) return;
+    const arr = byPiece.get(f.pieceId) || (byPiece.set(f.pieceId, []), byPiece.get(f.pieceId));
+    if (arr[arr.length - 1] !== f.id) arr.push(f.id);
   };
-  const add = (pieceId, a, b) => {
-    a = entity(a, pieceId); b = entity(b, pieceId);
-    if (!a || !b || a === b) return;
-    const pair = [a, b].sort(), key = pieceId + ':' + pair.join(':');
-    result.set(key, { key, pieceId, a: pair[0], b: pair[1] });
-  };
-  for (const e of c.edges) {
-    if (e.kind === 'internal') { const f = surface(e.sa); if (f) add(f.pieceId, e.from, e.to); continue; }
+  for (const e of c.edges || []) {
+    if (!e) continue;
+    if (e.kind === 'internal') { touch(surface(e.sa)); touch(surface(e.sb)); continue; }
+    /* Contact : la liaison pose ses deux surfaces ; les contacts d'une
+       référence vers la pièce suivante sont tous inclus. */
     const links = referenceStepLinks(e.from, e.to, s);
     if (e.linkId) links.add(e.linkId);
-    const fromPieces = new Set(nodeSurfaces(e.from, s).map(f => f.pieceId)), toPieces = new Set(nodeSurfaces(e.to, s).map(f => f.pieceId));
-    for (const l of s.liaisons.filter(l => links.has(l.id))) for (const [sa, sb] of [[l.a, l.b], [l.b, l.a]]) {
-      const a = surface(sa), b = surface(sb);
-      if (!a || !b || !fromPieces.has(a.pieceId) || !toPieces.has(b.pieceId)) continue;
-      add(a.pieceId, e.from, a.id); add(b.pieceId, b.id, e.to);
+    for (const id of links) {
+      const l = s.liaisons.find(x => x.id === id);
+      if (l) { touch(surface(l.a)); touch(surface(l.b)); }
+    }
+    touch(surface(e.sa)); touch(surface(e.sb));
+  }
+  const result = [];
+  for (const [pieceId, ids] of byPiece) {
+    for (let i = 0; i + 1 < ids.length; i++) {
+      if (ids[i] === ids[i + 1]) continue;
+      const pair = [ids[i], ids[i + 1]].sort(), key = pieceId + ':' + pair.join(':');
+      if (result.some(x => x.key === key)) continue;
+      result.push({ key, pieceId, a: pair[0], b: pair[1] });
     }
   }
-  return [...result.values()];
+  return result;
 }
 /* Liaison directe du cycle : utilisée quand l'utilisateur enchaîne deux surfaces
    qu'aucune liaison ne relie. Elle est tracée en courbe et se déforme au glisser. */
@@ -349,7 +391,14 @@ function cycleError(c, s = S()) {
   if (!cf) return 'La CF du cycle a été supprimée.';
   if (!Array.isArray(c.nodes) || c.nodes.length < 3 || !Array.isArray(c.edges) || c.edges.length !== c.nodes.length - 1) return 'Parcours incomplet.';
   const first = c.nodes[0], last = c.nodes[c.nodes.length - 1];
-  if (!((first === cf.a && last === cf.b) || (first === cf.b && last === cf.a))) return 'Le cycle doit relier les deux surfaces de sa CF.';
+  /* Une extrémité peut être la surface de CF elle-même, ou le groupe de
+     surfaces qui la contient (le cycle se ferme alors sur le groupe). */
+  const endOn = (id, cfEnd) => {
+    if (id === cfEnd) return true;
+    const g = s.groups.find(g => g.id === id && g.kind === 'ref');
+    return !!g && g.members.includes(cfEnd);
+  };
+  if (!((endOn(first, cf.a) && endOn(last, cf.b)) || (endOn(first, cf.b) && endOn(last, cf.a)))) return 'Le cycle doit relier les deux surfaces de sa CF.';
   if (new Set(c.nodes).size !== c.nodes.length) return 'Un nœud ne peut pas être traversé deux fois.';
   for (let i = 0; i < c.nodes.length; i++) {
     const id = c.nodes[i], surfaces = nodeSurfaces(id, s);
@@ -379,17 +428,48 @@ function cleanupCycles(s = S()) {
 
 let cycleDraft = null;
 const cycleNodeName = id => SF(id) ? sname(SF(id)) : (G(id)?.name || 'Référence');
+/* Un nœud ferme le cycle s'il est l'autre surface de la CF, ou le groupe de
+   surfaces qui la contient. */
+function cycleNodeCloses(id, other) {
+  if (id === other) return true;
+  const g = G(id);
+  return !!g && g.kind === 'ref' && g.members.includes(other);
+}
 function cycleDraftComplete() {
   if (!cycleDraft) return false;
   const cf = C(cycleDraft.cfId), ns = cycleDraft.nodes;
-  return !!cf && ns.length > 1 && ns[ns.length - 1] === (ns[0] === cf.a ? cf.b : cf.a);
+  if (!cf || ns.length < 2) return false;
+  return cycleNodeCloses(ns[ns.length - 1], ns[0] === cf.a ? cf.b : cf.a);
+}
+/* Étape entre deux nœuds : liaisons existantes, sinon trait direct avec
+   avertissement ; si plusieurs passages, une boîte de choix. */
+function chooseStepEdge(from, to, done) {
+  let edges = cycleEdges(from, to), warning = '';
+  if (!edges.length) {
+    /* Aucune liaison entre les deux nœuds : on ne bloque plus, on prévient. */
+    const free = freeCycleEdge(from, to);
+    if (!free) return toast('Choisissez une autre surface : ce nœud touche déjà l’étape précédente.');
+    const fa = SF(free.sa), fb = SF(free.sb);
+    warning = fa && fb && fa.pieceId === fb.pieceId
+      ? `Attention : aucune liaison de contact ne relie ${sname(fa)} et ${sname(fb)} dans cette pièce — le cycle trace un trait direct. Vérifiez que c’est bien voulu.`
+      : `Attention : aucune liaison ne relie ${sname(fa)} et ${sname(fb)} — le cycle trace un trait direct entre les deux surfaces. Vérifiez que c’est bien voulu.`;
+    edges = [free];
+  }
+  const finish = edge => { done(edge); if (warning) toast(warning); };
+  if (edges.length === 1 || edges.every(e => e.kind === edges[0].kind)) return finish(edges[0]);
+  const body = el(`<div><p>Plusieurs passages sont possibles par cette référence :</p>
+    <select id="cyclePass" style="width:100%">${edges.map((e, i) => `<option value="${i}">${esc(sname(SF(e.sa)))} ⟷ ${esc(sname(SF(e.sb)))} — ${e.kind === 'internal' ? 'dans la pièce' : esc(liaisonLabel(L(e.linkId)))}</option>`).join('')}</select></div>`);
+  openModal({ title: 'Choisir le passage', body, onOk: () => {
+    const edge = edges[Number($('#cyclePass', body).value)];
+    closeModal(); finish(edge); return false;
+  } });
 }
 function pickCycleNode(id, ctrl = false) {
   if (ctrl && cycleDraft?.nodes[cycleDraft.nodes.length - 1] === id) return cycleAction('back');
   if (!cycleDraft) {
     const cfs = cfOfSurfaceList(id);
     if (!cfs.length) return toast('Commencez par une surface de CF.');
-    const start = cf => { cycleDraft = { cfId: cf.id, nodes: [id], edges: [] }; render(); renderProps(); updateTip(); };
+    const start = cf => { cycleDraft = { cfId: cf.id, nodes: [id], edges: [], color: DEFAULT_CYCLE_COLOR }; render(); renderProps(); updateTip(); };
     if (cfs.length === 1) return start(cfs[0]);
     const body = el(`<div><p>Cette surface appartient à plusieurs CF. Le cycle porte sur une seule d'entre elles :</p>
       <select id="cycleCF" style="width:100%">${cfs.map(cf => `<option value="${cf.id}">${esc(cfDisplayName(cf))} — ${esc(endName(cf.a))} ⟷ ${esc(endName(cf.b))}</option>`).join('')}</select></div>`);
@@ -399,54 +479,146 @@ function pickCycleNode(id, ctrl = false) {
     } });
     return;
   }
-  if (cycleDraftComplete()) return saveCycleDialog();
   const cf = C(cycleDraft.cfId);
   if (!cf) { cycleDraft = null; return toast('La CF de départ a été supprimée. Recommencez le cycle.'); }
   const other = cycleDraft.nodes[0] === cf.a ? cf.b : cf.a;
+  const closes = cycleNodeCloses(id, other);
   if (cycleDraft.nodes.includes(id)) return toast('Ce nœud est déjà dans le cycle. Utilisez « Retirer la dernière étape ».');
   const surfaces = nodeSurfaces(id);
   if (!surfaces.length) return toast('Choisissez une surface ou un groupe de références.');
-  if (id !== other && surfaces.some(f => f.id === cf.a || f.id === cf.b)) return toast('Une seule CF par cycle : terminez sur son autre surface.');
-  const from = cycleDraft.nodes[cycleDraft.nodes.length - 1];
-  let edges = cycleEdges(from, id), warning = '';
-  if (!edges.length) {
-    /* Aucune liaison entre les deux nœuds : on ne bloque plus, on prévient. */
-    const free = freeCycleEdge(from, id);
-    if (!free) return toast('Choisissez une autre surface : ce nœud touche déjà l’étape précédente.');
-    const fa = SF(free.sa), fb = SF(free.sb);
-    warning = fa && fb && fa.pieceId === fb.pieceId
-      ? `Attention : aucune liaison de contact ne relie ${sname(fa)} et ${sname(fb)} dans cette pièce — le cycle trace un trait direct. Vérifiez que c’est bien voulu.`
-      : `Attention : aucune liaison ne relie ${sname(fa)} et ${sname(fb)} — le cycle trace un trait direct entre les deux surfaces. Vérifiez que c’est bien voulu.`;
-    edges = [free];
+  if (!closes && surfaces.some(f => f.id === cf.a || f.id === cf.b)) return toast('Une seule CF par cycle : terminez sur son autre surface.');
+  /* Insertion à une position choisie dans l'arborescence du panneau. */
+  if (cycleDraft.insertAt != null) {
+    const k = cycleDraft.insertAt; cycleDraft.insertAt = null;
+    return insertDraftNodeAt(id, k);
   }
   const append = edge => {
     cycleDraft.nodes.push(id); cycleDraft.edges.push(edge);
     render(); renderProps(); updateTip();
-    if (warning) toast(warning);
-    if (id === other) saveCycleDialog();
+    if (closes) saveCycleDialog();
   };
-  if (edges.length === 1 || edges.every(e => e.kind === edges[0].kind)) return append(edges[0]);
-  const body = el(`<div><p>Plusieurs passages sont possibles par cette référence :</p>
-    <select id="cyclePass" style="width:100%">${edges.map((e, i) => `<option value="${i}">${esc(sname(SF(e.sa)))} ⟷ ${esc(sname(SF(e.sb)))} — ${e.kind === 'internal' ? 'dans la pièce' : esc(liaisonLabel(L(e.linkId)))}</option>`).join('')}</select></div>`);
-  openModal({ title: 'Choisir le passage', body, onOk: () => {
-    const edge = edges[Number($('#cyclePass', body).value)];
-    closeModal(); append(edge); return false;
-  } });
+  if (!cycleDraftComplete()) return chooseStepEdge(cycleDraft.nodes[cycleDraft.nodes.length - 1], id, append);
+  /* Parcours déjà complet : la nouvelle surface est insérée juste avant la
+     fermeture, et les deux étapes sont recalculées. */
+  return insertDraftNodeAt(id, cycleDraft.nodes.length - 1);
+}
+/* Inserte une étape à la position k du parcours (k = nombre d'étapes = ajout). */
+function insertDraftNodeAt(id, k) {
+  const d = cycleDraft; if (!d) return;
+  const n = d.nodes.length;
+  if (k <= 0) return toast('La première étape est la surface de départ de la CF.');
+  const finish = () => { render(); renderProps(); updateTip(); toast('Étape insérée à cette position.'); };
+  if (k >= n) return chooseStepEdge(d.nodes[n - 1], id, e => { d.nodes.push(id); d.edges.push(e); finish(); });
+  chooseStepEdge(d.nodes[k - 1], id, e1 => chooseStepEdge(id, d.nodes[k], e2 => {
+    d.nodes.splice(k, 0, id);
+    d.edges.splice(k - 1, 1, e1, e2);
+    finish();
+  }));
+}
+/* Recalcule les étapes du parcours pour les paires de nœuds lo…hi. */
+function reconnectDraftEdges(lo, hi, done) {
+  const d = cycleDraft; if (!d) return done && done();
+  const step = j => {
+    if (j > hi || j > d.nodes.length - 2) return done && done();
+    chooseStepEdge(d.nodes[j], d.nodes[j + 1], e => { d.edges[j] = e; step(j + 1); });
+  };
+  step(Math.max(0, lo));
+}
+/* Déplace une étape (↑ ↓) ; les liaisons concernées sont recalculées. */
+function moveDraftNode(i, dir) {
+  const d = cycleDraft; if (!d) return;
+  const j = i + dir, n = d.nodes.length;
+  if (i <= 0 || j <= 0 || i >= n || j >= n) return;
+  moveDraftNodeTo(i, j);
+}
+/* Déplace une étape de la position `from` vers `to` (glisser-déposer dans
+   l'arborescence) ; les liaisons de la zone traversée sont recalculées. */
+function moveDraftNodeTo(from, to) {
+  const d = cycleDraft; if (!d) return;
+  const n = d.nodes.length;
+  if (from === to || from < 0 || to < 0 || from >= n) return;
+  const nodes = d.nodes.slice();
+  const [m] = nodes.splice(from, 1);
+  const at = Math.max(0, Math.min(to, nodes.length));
+  nodes.splice(at, 0, m);
+  const cf = C(d.cfId);
+  const startOk = cf && (cycleNodeCloses(nodes[0], cf.a) || cycleNodeCloses(nodes[0], cf.b));
+  if (!startOk) return toast('La première étape doit être une surface de la CF de départ.');
+  d.nodes = nodes;
+  reconnectDraftEdges(Math.max(0, Math.min(from, at) - 1), Math.min(n - 2, Math.max(from, at) + 1), () => {
+    render(); renderProps(); updateTip();
+  });
+}
+/* Clic sur une liaison pendant la création : ajoute automatiquement la
+   surface concernée (celle qui prolonge le parcours). */
+function pickCycleLink(l) {
+  if (!l) return;
+  if (!cycleDraft) return toast('Commencez par une surface de CF.');
+  const last = cycleDraft.nodes[cycleDraft.nodes.length - 1];
+  const lastSurfaces = nodeSurfaces(last).map(f => f.id);
+  let target = null;
+  if (lastSurfaces.includes(l.a)) target = l.b;
+  else if (lastSurfaces.includes(l.b)) target = l.a;
+  else {
+    const candidates = [l.a, l.b].filter(id => !cycleDraft.nodes.includes(id));
+    if (!candidates.length) return toast('Les deux surfaces de cette liaison sont déjà dans le cycle.');
+    if (candidates.length === 1) target = candidates[0];
+    else {
+      const lp = endPos(last) || { x: 0, y: 0 };
+      const dist = id => { const p = endPos(id); return p ? Math.hypot(p.x - lp.x, p.y - lp.y) : Infinity; };
+      target = candidates.sort((a, b) => dist(a) - dist(b))[0];
+    }
+  }
+  pickCycleNode(target);
+}
+/* Retire une étape du parcours (sauf la première) ; les voisins sont
+   reconnectés automatiquement. */
+function cycleDraftRemove(i) {
+  const d = cycleDraft; if (!d) return;
+  const n = d.nodes.length;
+  if (i <= 0) return toast('La première étape est la surface de départ de la CF.');
+  if (i >= n) return;
+  if (i === n - 1) { d.nodes.pop(); d.edges.pop(); render(); renderProps(); updateTip(); return; }
+  chooseStepEdge(d.nodes[i - 1], d.nodes[i + 1], edge => {
+    d.nodes.splice(i, 1);
+    d.edges.splice(i - 1, 2, edge);
+    render(); renderProps(); updateTip();
+  });
 }
 function saveCycleDialog() {
   if (!cycleDraftComplete()) return toast('Terminez sur l’autre surface de la CF de départ.');
-  const err = cycleError(cycleDraft);
+  const draft = cycleDraft, edit = draft.editId ? CY(draft.editId) : null;
+  const err = cycleError({ id: edit ? edit.id : undefined, num: edit ? edit.num : undefined, cfId: draft.cfId, nodes: draft.nodes, edges: draft.edges });
   if (err) return toast(err);
-  const body = el(`<div><div class="row"><label>Numéro du cycle</label><input id="cycleNum" type="number" min="1" step="1" value="${nextCycleNum()}" autofocus></div>
-    <div class="row"><label>Couleur du cycle</label><input id="cycleColor" type="color" value="${DEFAULT_CYCLE_COLOR}"></div><div class="err" id="cycleErr"></div></div>`);
-  openModal({ title: 'Créer le cycle — ' + cfDisplayName(C(cycleDraft.cfId)), body, okText: 'Créer le cycle', onOk: () => {
-    const num = Number($('#cycleNum', body).value), err = numberError(num, S().cycles);
-    if (err) { $('#cycleErr', body).textContent = err; return false; }
-    checkpoint();
-    const c = { ...clone(cycleDraft), id: uid(), num, visible: true, color: $('#cycleColor', body).value, displayOrder: nextCycleDisplayOrder() };
-    S().cycles.push(c); cycleDraft = null; pick = []; sel.clear();
-    changed(); updateTip(); toast(cycleName(c) + ' créé');
-  } });
+  const body = el(`<div><div class="row"><label>Numéro du cycle</label><input id="cycleNum" type="number" min="1" step="1" value="${edit ? edit.num : nextCycleNum()}" autofocus></div>
+    <div class="row"><label>Couleur du cycle</label><input id="cycleColor" type="color" value="${draft.color || DEFAULT_CYCLE_COLOR}"></div><div class="err" id="cycleErr"></div></div>`);
+  openModal({
+    title: (edit ? 'Modifier ' : 'Créer le cycle — ') + cfDisplayName(C(draft.cfId)), body, okText: edit ? 'Enregistrer le parcours' : 'Créer le cycle',
+    onOk: () => {
+      const num = Number($('#cycleNum', body).value), err = numberError(num, S().cycles, edit ? edit.id : null);
+      if (err) { $('#cycleErr', body).textContent = err; return false; }
+      const color = $('#cycleColor', body).value;
+      checkpoint();
+      const record = { num, color, cfId: draft.cfId, nodes: clone(draft.nodes), edges: clone(draft.edges) };
+      if (draft.bends && Object.keys(draft.bends).length) record.bends = clone(draft.bends);
+      if (draft.cps && Object.keys(draft.cps).length) record.cps = clone(draft.cps);
+      if (edit) Object.assign(edit, record);
+      else S().cycles.push({ id: uid(), visible: true, displayOrder: nextCycleDisplayOrder(), ...record });
+      const done = edit ? 'Parcours du cycle mis à jour' : 'cycle ' + num + ' créé';
+      cycleDraft = null; pick = []; sel.clear();
+      changed(); updateTip(); toast(done);
+    }
+  });
+}
+function startCycleEdit(c) {
+  const err = cycleError(c);
+  if (err) return toast('Modification impossible : ' + err);
+  setTool('cycle');
+  cycleDraft = { cfId: c.cfId, nodes: clone(c.nodes), edges: clone(c.edges), color: c.color || DEFAULT_CYCLE_COLOR, editId: c.id };
+  if (c.bends) cycleDraft.bends = clone(c.bends);
+  if (c.cps) cycleDraft.cps = clone(c.cps);
+  render(); renderProps(); updateTip();
+  toast('Parcours en modification : cliquer pour insérer une étape, ✕ pour en retirer une, puis valider.');
 }
 function renameCycle(c) {
   const body = el(`<div><div class="row"><label>Numéro du cycle</label><input id="cycleNum" type="number" min="1" step="1" value="${c.num}" autofocus></div><div class="err" id="cycleErr"></div></div>`);
@@ -460,24 +632,50 @@ function cyclesPanel() {
   const cs = S().cycles;
   const priority = cycleDisplayOrder().filter(c => c.visible !== false).reverse();
   return `<h3 style="color:#c65e00">Cycles</h3>
-    <p class="muted">Une CF par cycle : partir d’une de ses surfaces et finir sur l’autre.</p>
-    <ul class="help-list cycle-tips"><li><b>Clic ou Ctrl+clic</b> : ajouter une surface ou une référence.</li><li><b>Ctrl+clic sur la dernière étape</b> ou <b>Retour arrière</b> : la retirer ; <b>Échap</b> : annuler.</li><li>Les contacts d’une référence vers la pièce suivante sont tous inclus, même si une seule surface est cliquée.</li><li>Le cycle a sa propre couleur pour les pointillés, surfaces, références et courbes internes. La CF garde son affichage noir / couleur.</li></ul>
+    <p class="muted">Une CF par cycle : partir d’une de ses surfaces et finir sur l’autre (ou sur le groupe de surfaces qui la contient).</p>
+    <ul class="help-list cycle-tips"><li><b>Clic ou Ctrl+clic</b> : ajouter une surface ou une référence ; <b>cliquer sur une liaison</b> ajoute directement la surface concernée ; le parcours en cours est tracé <b>en gras</b>.</li><li><b>✕</b> sur une étape, <b>Ctrl+clic sur la dernière étape</b>, <b>Retour arrière</b> ou <b>Ctrl+Z</b> : la retirer ; <b>Échap</b> : annuler. Les étapes se réordonnent au <b>glisser-déposer</b> ou avec ↑ ↓, et s’insèrent n’importe où avec ＋.</li><li>Les contacts d’une référence vers la pièce suivante sont tous inclus, même si une seule surface est cliquée.</li><li>Le cycle a sa propre couleur (choisie dès le début) pour les pointillés, surfaces, références et courbes internes. La CF garde son affichage noir / couleur.</li><li><b>Glisser le fond</b> déplace la vue pendant la création.</li></ul>
     ${S().groups.some(g => g.kind === 'fonc' && g.collapsed) ? '<button data-ca="expand">Développer les groupes pour voir toutes les surfaces</button>' : ''}
-    ${cycleDraft ? `<h4>Parcours — ${esc(cfDisplayName(C(cycleDraft.cfId)))}</h4>
-      <ol class="help-list">${cycleDraft.nodes.map(id => `<li>${esc(cycleNodeName(id))}</li>`).join('')}</ol>
-      <div class="btns"><button data-ca="back">↶ Retirer la dernière étape</button><button data-ca="cancel">Annuler le parcours</button>${cycleDraftComplete() ? '<button data-ca="finish" class="primary">Valider le cycle</button>' : ''}</div>` : ''}
+    ${cycleDraft ? `<h4>${cycleDraft.editId ? 'Modification du parcours' : 'Parcours'} — ${esc(cfDisplayName(C(cycleDraft.cfId)))}</h4>
+      <div class="row"><label>Couleur</label><input type="color" data-cycle-draft-color value="${cycleDraft.color || DEFAULT_CYCLE_COLOR}" aria-label="Couleur du cycle en cours"></div>
+      <div class="cycle-tree">${cycleDraft.nodes.map((id, i) => {
+        const n = cycleDraft.nodes.length;
+        return `<div class="ct-row${i === 0 ? ' ct-first' : ''}${cycleDraft.insertAt === i + 1 ? ' ct-insert' : ''}" draggable="true" data-i="${i}" title="Glisser pour changer l’ordre">
+          <span class="ct-idx">${i + 1}.</span>
+          <span class="ct-name" title="${esc(cycleNodeName(id))}">${esc(cycleNodeName(id))}</span>
+          <span class="ct-acts">
+            ${i > 0 ? `<button data-ca="up" data-i="${i}" title="Monter cette étape dans le parcours">↑</button>` : ''}
+            ${i < n - 1 ? `<button data-ca="down" data-i="${i}" title="Descendre cette étape dans le parcours">↓</button>` : ''}
+            ${(i < n - 1 || !cycleDraftComplete()) ? `<button data-ca="insafter" data-i="${i}" title="Insérer une étape ici : choisir sa position, puis cliquer la surface sur le graphe">＋</button>` : ''}
+            ${i ? `<button data-ca="rmnode" data-i="${i}" class="danger" title="Supprimer cette étape (les voisins sont reconnectés)">✕</button>` : '<span class="muted" style="font-size:10px">départ</span>'}
+          </span></div>`;
+      }).join('')}
+      ${cycleDraft.insertAt != null ? `<div class="ct-note">Insertion avant l’étape ${cycleDraft.insertAt + 1} : <b>cliquez sur une surface</b> du graphe — <button data-ca="cancelinsert">Annuler l’insertion</button></div>` : ''}
+      </div>
+      <div class="btns"><button data-ca="back">↶ Retirer la dernière étape</button><button data-ca="cancel">Annuler le parcours</button>${cycleDraftComplete() ? `<button data-ca="finish" class="primary">${cycleDraft.editId ? '✔ Enregistrer le parcours' : '✔ Valider le cycle'}</button>` : ''}</div>` : ''}
     <h4>Cycles existants (${cs.length})</h4>
-    <p class="muted">Sur un élément commun, le dernier cycle affiché est prioritaire. Priorité 1 = le plus récent.</p>
+    <p class="muted">Sur un élément commun, le dernier cycle affiché est prioritaire ; les cycles multiples sur un même lien sont tracés côte à côte.</p>
     <div class="btns"><button data-ca="hideall" ${cs.length ? '' : 'disabled'}>Tout cacher</button><button data-ca="showall" ${cs.length ? '' : 'disabled'}>Tout afficher en couleur</button>
       <button data-ca="extractall" ${cs.length ? '' : 'disabled'}>Une feuille par cycle</button></div>
     ${cs.map(c => `<div class="cycle-card" data-cycle="${c.id}">
       <label><input type="checkbox" data-cycle-visible="${c.id}" ${c.visible !== false ? 'checked' : ''}> <b>${esc(cycleName(c))}</b> — ${esc(cfDisplayName(C(c.cfId)))}</label>
       <div class="row"><label>Couleur</label><input type="color" data-cycle-color="${c.id}" value="${c.color || DEFAULT_CYCLE_COLOR}" aria-label="Couleur de ${cycleName(c)}"><span class="muted">${c.visible !== false ? 'Priorité ' + (priority.indexOf(c) + 1) : 'Masqué'}</span></div>
       <div class="muted">${c.nodes.length} nœuds · ${cycleContents(c).links.size} contact(s)</div>
-      <div class="btns"><button data-ca="show" data-cid="${c.id}">Afficher en couleur</button><button data-ca="rename" data-cid="${c.id}">Numéro…</button><button data-ca="extract" data-cid="${c.id}">Extraire en feuille</button><button data-ca="delete" data-cid="${c.id}" class="danger">Supprimer</button></div></div>`).join('') || '<p class="muted">Aucun cycle. Créez d’abord une CF et les contacts nécessaires.</p>'}`;
+      <div class="btns"><button data-ca="show" data-cid="${c.id}">Afficher en couleur</button><button data-ca="edit" data-cid="${c.id}" title="Retirer, insérer ou remplacer des étapes du parcours">✎ Modifier le parcours…</button><button data-ca="rename" data-cid="${c.id}">Numéro…</button><button data-ca="extract" data-cid="${c.id}">Extraire en feuille</button><button data-ca="delete" data-cid="${c.id}" class="danger">Supprimer</button></div></div>`).join('') || '<p class="muted">Aucun cycle. Créez d’abord une CF et les contacts nécessaires.</p>'}`;
 }
-function cycleAction(action, id) {
+function cycleAction(action, id, btn) {
   const c = CY(id);
+  const di = () => Number(btn?.dataset?.i);
+  if (action === 'rmnode') return cycleDraftRemove(di());
+  if (action === 'insafter') {
+    if (!cycleDraft) return;
+    const k = di() + 1;
+    cycleDraft.insertAt = cycleDraft.insertAt === k ? null : k;
+    render(); renderProps(); updateTip();
+    return;
+  }
+  if (action === 'cancelinsert') { if (cycleDraft) cycleDraft.insertAt = null; render(); renderProps(); updateTip(); return; }
+  if (action === 'up') return moveDraftNode(di(), -1);
+  if (action === 'down') return moveDraftNode(di(), 1);
   if (action === 'back') {
     if (cycleDraft) { cycleDraft.nodes.pop(); cycleDraft.edges.pop(); if (!cycleDraft.nodes.length) cycleDraft = null; }
     render(); renderProps(); updateTip(); return;
@@ -485,6 +683,7 @@ function cycleAction(action, id) {
   if (action === 'cancel') { cycleDraft = null; render(); renderProps(); updateTip(); return; }
   if (action === 'finish') return saveCycleDialog();
   if (action === 'expand') { checkpoint(); S().groups.filter(g => g.kind === 'fonc').forEach(g => g.collapsed = false); changed(); return; }
+  if (action === 'edit' && c) return startCycleEdit(c);
   if (action === 'rename' && c) return renameCycle(c);
   if (action === 'extract' && c) return extractCycles([c]);
   if (action === 'extractall') return extractCycles(S().cycles);
@@ -499,7 +698,13 @@ function cycleSnapshotSheet(source, c) {
   const contents = cycleContents(c, source), sids = contents.surfaces, gids = contents.references;
   const cf = source.cfgs.find(f => f.id === c.cfId);
   if (!cf) throw new Error('La CF du cycle a été supprimée.');
-  sids.add(cf.a); sids.add(cf.b);
+  for (const id of [cf.a, cf.b]) {
+    if (source.surfaces.some(f => f.id === id)) sids.add(id);
+    else {
+      const g = source.groups.find(x => x.id === id && x.kind === 'ref');
+      if (g) { gids.add(g.id); g.members.forEach(m => sids.add(m)); }
+    }
+  }
   const surfaces = source.surfaces.filter(f => sids.has(f.id)), pids = new Set(surfaces.map(f => f.pieceId));
   const sh = newSheet(source.name + ' — ' + cycleName(c));
   Object.assign(sh, clone({ pieces: source.pieces.filter(p => pids.has(p.id)), surfaces,

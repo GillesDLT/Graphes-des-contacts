@@ -7,6 +7,12 @@ const clone = o => JSON.parse(JSON.stringify(o));
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const r1 = v => Math.round(v * 10) / 10;
 const clampN = (v, a, b) => Math.max(a, Math.min(b, v));
+/* Points de contrôle d'une courbe : deux points {u, v} exprimés dans le repère
+   de la corde (u le long de la corde, v selon la normale), ou null = courbe
+   automatique. */
+function validCurveCps(cps) {
+  return Array.isArray(cps) && cps.length === 2 && cps.every(p => p && Number.isFinite(p.u) && Number.isFinite(p.v));
+}
 
 function hexToRgb(h) {
   h = (h || '#000000').replace('#', '');
@@ -60,8 +66,11 @@ const DEFAULT_SETTINGS = {
   showTorseurs: false,
   showIsoRefs: true,
   showSpecs: true,
+  showHints: true,
   showNominalZero: false,
   grid: true,
+  lockPieces: false,
+  lockSurfaces: false,
   torseurLetters: { X: 'u', L: 'α', Y: 'v', M: 'β', Z: 'w', N: 'γ' },
   groupColors: { rep: '#e9edf6', fonc: '#fde7c4', ref: '#2b7de9' }
 };
@@ -161,6 +170,11 @@ function loadDoc(o) {
       if (ann.toleranceClass == null) ann.toleranceClass = '';
       if (!Array.isArray(ann.supplementary)) ann.supplementary = [];
       if (!ann.complementaryData || typeof ann.complementaryData !== 'object') ann.complementaryData = {};
+      if (!Array.isArray(ann.badges)) ann.badges = [];
+      ann.badges = ann.badges.filter(b => b && typeof b === 'object').map(b => b.kind === 'E'
+        ? { id: b.id || uid(), kind: 'E' }
+        : { id: b.id || uid(), kind: 'text', text: String(b.text || '') });
+      ann.textOnly = !!ann.textOnly;
     });
     migrateCFs(s);
     s.pieces.forEach(p => {
@@ -177,6 +191,9 @@ function loadDoc(o) {
     });
     connections(s).forEach(l => {
       if (l.curved && (!Number.isFinite(l.bend))) throw new Error('Courbure de lien invalide.');
+      /* Points de contrôle Bézier libres : indice {u, v} le long de la corde.
+         Une valeur illisible est ignorée (retour à la courbure simple). */
+      if (l.cps != null && !validCurveCps(l.cps)) delete l.cps;
     });
     s.cycles.forEach((c, i) => {
       if (!c || !Number.isSafeInteger(c.num) || c.num < 1) throw new Error('Numéro de cycle invalide.');
@@ -184,6 +201,12 @@ function loadDoc(o) {
       if (!/^#[0-9a-f]{6}$/i.test(c.color)) throw new Error('Couleur de cycle invalide.');
       if (c.displayOrder == null) c.displayOrder = i + 1;
       if (!Number.isSafeInteger(c.displayOrder) || c.displayOrder < 1) throw new Error('Priorité de cycle invalide.');
+      /* Déformations manuelles des courbes du cycle (corde + points Bézier). */
+      if (c.bends != null && (typeof c.bends !== 'object' || Array.isArray(c.bends))) c.bends = {};
+      if (c.bends) for (const key of Object.keys(c.bends)) if (!Number.isFinite(c.bends[key])) delete c.bends[key];
+      if (c.cps != null && (typeof c.cps !== 'object' || Array.isArray(c.cps))) c.cps = {};
+      if (c.cps) for (const key of Object.keys(c.cps)) if (!validCurveCps(c.cps[key])) delete c.cps[key];
+      (c.edges || []).forEach(e => { if (e && e.cps != null && !validCurveCps(e.cps)) delete e.cps; });
     });
     s.groups.forEach(g => {
       delete g.pts; delete g.auto; delete g.n; delete g.dash;
@@ -237,7 +260,7 @@ function surfVisible(s) {
   const hid = hostIdOf(s.pieceId);
   return connections().some(l => (l.a === s.id || l.b === s.id) && hostIdOf(SF(l.a === s.id ? l.b : l.a)?.pieceId) !== hid);
 }
-function liaisonVisible(l) { const a = SF(l.a), b = SF(l.b); return !!(a && b) && hostIdOf(a.pieceId) !== hostIdOf(b.pieceId); }
+function liaisonVisible(l) { const a = endPiece(l.a), b = endPiece(l.b); return !!a && !!b && hostIdOf(a) !== hostIdOf(b); }
 function soff(s) { return hostMap.has(s.pieceId) ? { dx: s.cdx || 0, dy: s.cdy || 0 } : { dx: s.dx, dy: s.dy }; }
 function referenceConfigurationError(s = S(), groups = s.groups, surfaces = s.surfaces, links = connections(s)) {
   const physical = referenceLayoutError(groups, surfaces);
@@ -265,9 +288,23 @@ function referenceCreationError(addedSurfaces, nextLinks, replacedIds = [], s = 
 }
 function spos(s) { const p = hostOf(s.pieceId), o = soff(s); return p ? { x: p.x + o.dx, y: p.y + o.dy } : { x: o.dx, y: o.dy }; }
 function sname(s) { if (s.name) return s.name; const p = P(s.pieceId); return `${s.type}.${p ? p.num : '?'}.${s.idx}`; }
-function endPos(id) { const s = SF(id); if (s) return spos(s); const p = P(id); return p ? { x: p.x, y: p.y } : null; }
-function endName(id) { const s = SF(id); if (s) return sname(s); const p = P(id); return p ? p.name : '?'; }
-function endPiece(id) { const s = SF(id); return s ? s.pieceId : id; }
+/* Extrémité de lien : une surface, un groupe de référence (référence ISO) ou une pièce. */
+const refGroupOf = id => { const g = G(id); return g && g.kind === 'ref' ? g : null; };
+function endPos(id) {
+  const s = SF(id); if (s) return spos(s);
+  const g = refGroupOf(id); if (g) return membersCenter(g);
+  const p = P(id); return p ? { x: p.x, y: p.y } : null;
+}
+function endName(id) {
+  const s = SF(id); if (s) return sname(s);
+  const g = refGroupOf(id); if (g) return g.name || 'Référence';
+  const p = P(id); return p ? p.name : '?';
+}
+function endPiece(id) {
+  const s = SF(id); if (s) return s.pieceId;
+  const g = refGroupOf(id); if (g) { const f = g.members.map(SF).find(Boolean); return f ? f.pieceId : id; }
+  return id;
+}
 /* ===== Placement organique des surfaces =====
    Chaque surface est sur une « piste » elliptique à distance constante du bord de sa pièce.
    Elle s'oriente vers la (les) surface(s) liée(s) ; l'ordre le long du bord est conservé et
@@ -575,9 +612,14 @@ function cleanupOrphans(s = S()) {
     const sids = new Set(s.surfaces.map(x => x.id));
     const nl = s.liaisons.filter(l => sids.has(l.a) && sids.has(l.b));
     if (nl.length !== s.liaisons.length) { s.liaisons = nl; again = true; }
-    const nc = s.cfgs.filter(c => sids.has(c.a) && sids.has(c.b));
+    const nc = s.cfgs.filter(c => { const alive = id => sids.has(id) || s.groups.some(g => g.id === id); return alive(c.a) && alive(c.b); });
     if (nc.length !== s.cfgs.length) { s.cfgs = nc; again = true; }
     const used = new Set(); connections(s).forEach(l => { used.add(l.a); used.add(l.b); });
+    /* Une CF peut s'accrocher à un groupe de référence : ses surfaces restent utiles. */
+    s.cfgs.forEach(c => [c.a, c.b].forEach(id => {
+      const g = s.groups.find(x => x.id === id && x.kind === 'ref');
+      if (g) g.members.forEach(m => used.add(m));
+    }));
     if (s.cycleSnapshot) s.cycles.forEach(c => cycleContents(c, s).surfaces.forEach(id => used.add(id)));
     const ns = s.surfaces.filter(x => used.has(x.id) || x.free);
     if (ns.length !== s.surfaces.length) { s.surfaces = ns; again = true; }
@@ -651,14 +693,14 @@ function collect(ids) {
     const k = kindOf(id);
     if (k === 'piece') pids.add(id);
     if (k === 'isoRef') { const ref = (s.isoRefs || []).find(x => x.id === id); if (ref?.ownerPieceId) pids.add(ref.ownerPieceId); }
-    if (k === 'cfg') { const c = C(id); pids.add(SF(c.a).pieceId); pids.add(SF(c.b).pieceId); }
+    if (k === 'cfg') { const c = C(id); pids.add(endPiece(c.a)); pids.add(endPiece(c.b)); }
     if (k === 'group') {
       const g = G(id);
       if (g.kind !== 'ref') g.members.forEach(m => pids.add(m)); else g.members.forEach(m => { const sf = SF(m); if (sf) pids.add(sf.pieceId); });
-      if (g.kind === 'rep') (g.cfIds || []).forEach(id => { const cf = C(id); if (cf) { pids.add(SF(cf.a).pieceId); pids.add(SF(cf.b).pieceId); } });
+      if (g.kind === 'rep') (g.cfIds || []).forEach(id => { const cf = C(id); if (cf) { pids.add(endPiece(cf.a)); pids.add(endPiece(cf.b)); } });
       if (g.kind === 'fonc') (g.repLabelIds || []).map(G).filter(g => g && g.kind === 'rep').forEach(rep => {
         groupIds.add(rep.id); rep.members.forEach(id => pids.add(id));
-        (rep.cfIds || []).map(C).filter(Boolean).forEach(cf => { pids.add(SF(cf.a).pieceId); pids.add(SF(cf.b).pieceId); });
+        (rep.cfIds || []).map(C).filter(Boolean).forEach(cf => { pids.add(endPiece(cf.a)); pids.add(endPiece(cf.b)); });
       });
     }
   }

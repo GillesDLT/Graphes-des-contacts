@@ -161,7 +161,9 @@ function linkPath(g, start = g.t0, end = g.t1) {
   return cubicPath(cubicSegment(g.ctrl[0], g.ctrl[1], g.ctrl[2], g.ctrl[3], start, end));
 }
 /* Copie parallèle d'un trait de lien (cycles multiples sur une même liaison,
-   tracés côte à côte le long de la normale). */
+   tracés côte à côte le long de la normale). La copie suit le tracé réellement
+   visible (déjà rogné aux bulles) : sur une courbe, elle ne passe donc pas par
+   dessus les surfaces. */
 function linkPathOffset(g, off) {
   if (!off) return linkPath(g);
   const dx = g.bx - g.ax, dy = g.by - g.ay, len = Math.hypot(dx, dy) || 1, nx = -dy / len, ny = dx / len;
@@ -170,7 +172,7 @@ function linkPathOffset(g, off) {
     const a = shift({ x: g.x1, y: g.y1 }), b = shift({ x: g.x2, y: g.y2 });
     return `M${r1(a.x)},${r1(a.y)}L${r1(b.x)},${r1(b.y)}`;
   }
-  return cubicPath(g.ctrl.map(shift));
+  return cubicPath(cubicSegment(g.ctrl[0], g.ctrl[1], g.ctrl[2], g.ctrl[3], g.t0, g.t1).map(shift));
 }
 function nearestLinkT(g, pt) {
   let best = 0.5, distance = Infinity;
@@ -519,10 +521,14 @@ function renderOverlay() {
     const id = [...sel][0], l = L(id) || C(id);
     if (l?.curved && liaisonVisible(l)) {
       const g = linkGeom(l), p = { x: g.cx, y: g.cy }, chs = 7 / k, hit = 12 / k;
-      o += `<line x1="${r1((g.ax + g.bx) / 2)}" y1="${r1((g.ay + g.by) / 2)}" x2="${r1(p.x)}" y2="${r1(p.y)}" stroke="${blue}" stroke-width="${sw}" stroke-dasharray="4 3" pointer-events="none"/>` +
-        `<line x1="${r1(g.ctrl[0].x)}" y1="${r1(g.ctrl[0].y)}" x2="${r1(g.c1.x)}" y2="${r1(g.c1.y)}" stroke="${blue}" stroke-opacity="0.55" stroke-width="${sw}" stroke-dasharray="3 3" pointer-events="none"/>` +
-        `<line x1="${r1(g.ctrl[3].x)}" y1="${r1(g.ctrl[3].y)}" x2="${r1(g.c2.x)}" y2="${r1(g.c2.y)}" stroke="${blue}" stroke-opacity="0.55" stroke-width="${sw}" stroke-dasharray="3 3" pointer-events="none"/>` +
-        `<circle data-bend-id="${id}" cx="${r1(p.x)}" cy="${r1(p.y)}" r="${8 / k}" fill="white" stroke="${blue}" stroke-width="${2 / k}"><title>Glisser pour cintrer le lien (forme simple)</title></circle>`;
+      /* Poignée de courbure simple : masquée dès que les poignées Bézier sont
+         utilisées (elle n'a plus d'effet) ; « Forme simple » la ramène. */
+      if (!validCurveCps(l.cps)) {
+        o += `<line x1="${r1((g.ax + g.bx) / 2)}" y1="${r1((g.ay + g.by) / 2)}" x2="${r1(p.x)}" y2="${r1(p.y)}" stroke="${blue}" stroke-width="${sw}" stroke-dasharray="4 3" pointer-events="none"/>` +
+          `<circle data-bend-id="${id}" cx="${r1(p.x)}" cy="${r1(p.y)}" r="${8 / k}" fill="white" stroke="${blue}" stroke-width="${2 / k}"><title>Glisser pour cintrer le lien (forme simple)</title></circle>`;
+      }
+      o += `<line x1="${r1(g.ctrl[0].x)}" y1="${r1(g.ctrl[0].y)}" x2="${r1(g.c1.x)}" y2="${r1(g.c1.y)}" stroke="${blue}" stroke-opacity="0.55" stroke-width="${sw}" stroke-dasharray="3 3" pointer-events="none"/>` +
+        `<line x1="${r1(g.ctrl[3].x)}" y1="${r1(g.ctrl[3].y)}" x2="${r1(g.c2.x)}" y2="${r1(g.c2.y)}" stroke="${blue}" stroke-opacity="0.55" stroke-width="${sw}" stroke-dasharray="3 3" pointer-events="none"/>`;
       [g.c1, g.c2].forEach((cp, ci) => {
         o += `<rect data-cp-id="${id}" data-cp-i="${ci}" x="${r1(cp.x - hit)}" y="${r1(cp.y - hit)}" width="${2 * hit}" height="${2 * hit}" fill="transparent"/>` +
           `<rect data-cp-id="${id}" data-cp-i="${ci}" x="${r1(cp.x - chs)}" y="${r1(cp.y - chs)}" width="${2 * chs}" height="${2 * chs}" fill="#fff" stroke="${blue}" stroke-width="${2 / k}"><title>Poignée Bézier : glisser pour sculpter librement la courbe</title></rect>`;

@@ -26,6 +26,8 @@ function renderProps() {
   if (target) $$('input[type=color][data-k]', box).forEach(i => i.value = rgbToHex(target[i.dataset.k]) || '#000000');
   wireProps(box, target);
   if (target && kindOf(target.id) === 'isoSpec') wireSpecEditor(box, target, null);
+  /* L'éditeur flottant de pièce suit le même contenu que le panneau. */
+  if (typeof refreshPiecePopup === 'function') refreshPiecePopup();
 }
 
 function emptyPanel() {
@@ -64,7 +66,7 @@ function isoRefPanel(r) {
 }
 function isoSpecPanel(sp) {
   return `<h3>${ISO_SPEC_ICON} Spécification</h3>` + specEditorHTML(sp) +
-    `<p class="muted">Glissez le cadre pour le déplacer ; les poignées bleues déplacent le coude de chaque lien. Le cadre peut être libre ou lié à des surfaces et groupes d’une seule pièce, qu’il suit. Copier-coller une spécification crée un cadre libre sans pièce, surface ni lien. Chaque lien se règle en flèche, triangle plein ou trait simple. Double-clic sur le cadre pour l’éditer dans une fenêtre.</p>
+    `<p class="muted">Glissez le cadre pour le déplacer ; les poignées bleues déplacent le coude de chaque lien. Le cadre peut être libre ou lié à des surfaces et groupes d’une seule pièce, qu’il suit. Copier-coller une spécification crée un cadre libre sans pièce, surface ni lien. Chaque lien se règle en flèche, triangle plein ou trait simple. Le (E) et les lettres encadrées suivent la cote ; « Cacher le cadre » masque le cadre et fait partir les liens du soulignement. Double-clic sur le cadre pour l’éditer dans une fenêtre.</p>
     <div class="btns"><button data-pa="del" class="danger">🗑 Supprimer</button></div>`;
 }
 function piecePanel(p) {
@@ -78,7 +80,7 @@ function piecePanel(p) {
     <div class="btns"><button data-pa="circle" title="Rendre la pièce circulaire en un clic (même rayon en largeur et hauteur)">◯ Cercle parfait</button>${p.lab ? '<button data-pa="labauto" title="Remettre le nom à sa place automatique, centrée dans la pièce">↺ Recentre le nom</button>' : ''}${p.nominal ? '<button data-pa="nominalauto">Réinitialiser la position du nominal 0</button>' : ''}</div>
     <p class="muted">Glisser le nom pour le déplacer ; double-clic sur le nom pour le recentrer.</p>
     <h4>Surfaces (${surfs.length})</h4>
-    <div>${surfs.map(s => `<button data-goto="${s.id}" style="margin:2px">${esc(sname(s))}</button>`).join('') || '<span class="muted">aucune</span>'}</div>
+    <div>${surfs.map(s => `<button data-goto="${s.id}" style="margin:2px">${vecHTML(sname(s))}</button>`).join('') || '<span class="muted">aucune</span>'}</div>
     <div class="btns"><button data-pa="linkfrom">⟷ Lier à une autre pièce…</button>
     <button data-pa="addsurface" title="Ajouter une surface libre : une bulle isolée, sans liaison ni CF">◦ Surface libre</button>
     <button data-pa="dup">⧉ Dupliquer</button><button data-pa="del" class="danger">🗑 Supprimer</button></div>`;
@@ -86,7 +88,7 @@ function piecePanel(p) {
 function surfPanel(s) {
   const p = P(s.pieceId), ls = S().liaisons.filter(l => l.a === s.id || l.b === s.id);
   const cfs = cfOfSurfaceList(s.id), cf = cfs[0];
-  return `<h3>◦ Surface <b>${esc(sname(s))}</b></h3>
+  return `<h3>◦ Surface <b>${vecHTML(sname(s))}</b></h3>
     ${fRow('Pièce', `<button data-goto="${p.id}">${esc(p.name)} (${p.num})</button>`)}
     ${fRow('Type', fSel('type', s.type, doc.settings.surfaceTypes.map(t => [t.code, t.code + ' — ' + t.label])))}
     ${fRow('N° surface', fNum('idx', s.idx, 1))}
@@ -105,7 +107,7 @@ function linkPanel(l) {
   const sa = SF(l.a), sb = SF(l.b), pa = P(sa.pieceId), pb = P(sb.pieceId), t = ltype(l.type);
   return `<h3>⟷ Liaison ${esc(l.type)}</h3>
     <div style="display:flex;gap:10px;align-items:center"><div class="ld-schema">${symbolSVG(l.type, l.details, pa.color, pb.color, 110)}</div>
-    <div><b>${esc(t.label)}</b><br>${l.count > 1 ? l.count + ' × ' : ''}${vecHTML(detailText(l.type, l.details))}<br><span class="muted">${esc(sname(sa))} ⟷ ${esc(sname(sb))}</span></div></div>
+    <div><b>${esc(t.label)}</b><br>${l.count > 1 ? l.count + ' × ' : ''}${vecHTML(detailText(l.type, l.details))}<br><span class="muted">${vecHTML(sname(sa))} ⟷ ${vecHTML(sname(sb))}</span></div></div>
     <div class="btns"><button data-pa="editlink" class="primary">✎ Modifier la liaison…</button></div>
     ${fRow('Répétition', fNum('count', l.count, 1))}
     ${fRow('Libellé', fText('label', l.label, liaisonLabel(Object.assign({}, l, { label: '' })) + ' (auto)'))}
@@ -113,12 +115,12 @@ function linkPanel(l) {
     ${fRow('Couleur trait', fColor('color'))}
     ${curveFields(l)}
     ${torseurFields(l)}
-    <div class="btns"><button data-goto="${sa.id}">${esc(sname(sa))}</button><button data-goto="${sb.id}">${esc(sname(sb))}</button><button data-pa="del" class="danger" title="Supprime la liaison et ses 2 surfaces">🗑 Supprimer (avec ses surfaces)</button></div>`;
+    <div class="btns"><button data-goto="${sa.id}">${vecHTML(sname(sa))}</button><button data-goto="${sb.id}">${vecHTML(sname(sb))}</button><button data-pa="del" class="danger" title="Supprime la liaison et ses 2 surfaces">🗑 Supprimer (avec ses surfaces)</button></div>`;
 }
 function torseurFields(l) {
-  const v = torseurValues(l);
-  return `<h4>Torseur <span class="muted">{T_${esc(torseurTitle(l))}}_{${esc(torseurPoint(l))}}</span></h4>
-    ${fRow('Point', fText('point', (l.details && l.details.point) || '', 'A (défaut)'))}
+  const v = torseurValues(l), cf = isCFTorseur(l);
+  return `<h4>Torseur <span class="muted">${esc(torseurTitle(l))}</span></h4>
+    ${cf ? '' : fRow('Point', fText('point', (l.details && l.details.point) || '', 'A (défaut)'))}
     <div class="torsor-grid">${[['X', 'L'], ['Y', 'M'], ['Z', 'N']].map(([a, b]) =>
       `<label>${esc(torseurLetter(a))}</label><input type="text" data-torsor="${a}" value="${esc(v[a])}" aria-label="Composante ${esc(torseurLetter(a))}">` +
       `<label>${esc(torseurLetter(b))}</label><input type="text" data-torsor="${b}" value="${esc(v[b])}" aria-label="Composante ${esc(torseurLetter(b))}">`).join('')}</div>
@@ -145,8 +147,8 @@ function groupPanel(g) {
       <button data-pa="del" class="danger">🗑 Supprimer</button></div>`;
 }
 function curveFields(l) {
-  return fRow('Tracé', fCheck('curved', !!l.curved, 'Courbe (poignée avec Déplacer)')) +
-    (l.curved ? '<div class="btns"><button data-pa="straight">Remettre droit</button></div>' : '');
+  return fRow('Tracé', fCheck('curved', !!l.curved, 'Courbe (poignées avec Déplacer)')) +
+    (l.curved ? `<div class="btns"><button data-pa="straight">Remettre droit</button>${validCurveCps(l.cps) ? '<button data-pa="curvereset" title="Revenir à la courbure simple, sans les poignées Bézier">↺ Forme simple</button>' : ''}</div>` : '');
 }
 function cfgPanel(c) {
   return `<h3 style="color:${cfRenderColor(c)}">${esc(cfDisplayName(c))}</h3>
@@ -155,6 +157,7 @@ function cfgPanel(c) {
     ${fRow('Affichage', fCheck('inColor', c.inColor !== false, 'Dans sa couleur (sinon noir)'))}
     ${curveFields(c)}
     ${fRow('Libellé', fCheck('labelBox', !!c.labelBox, 'Encadrer le texte sur le trait'))}
+    ${torseurFields(c)}
     <p class="muted">Deux surfaces de cette CF (existantes ou nouvelles), sans surlignage automatique des liaisons. Point et normale facultatifs dans « Modifier les surfaces… ».</p>
     <div class="btns"><button data-goto="${c.a}">${esc(endName(c.a))}</button><button data-goto="${c.b}">${esc(endName(c.b))}</button></div>
     <div class="btns"><button data-pa="editcf">Modifier les surfaces…</button><button data-pa="cfs">Gérer toutes les CF</button><button data-pa="cycles">Gérer les cycles</button><button data-pa="del" class="danger">Supprimer la CF et ses surfaces</button></div>`;
@@ -182,6 +185,7 @@ function applyField(target, inp) {
   }
   else v = inp.value;
   const kd = kindOf(target.id);
+  const errBox = inp.closest('#props, .pe-body, .body')?.querySelector('#ppErr') || $('#ppErr');
   if (kd === 'isoRef' && k === 'type') {
     target.type = v;
     if (v === 'partial' && (target.text === 'A' || !target.text)) target.text = '⌀';
@@ -201,8 +205,8 @@ function applyField(target, inp) {
     inp.classList.remove('invalid');
   }
   if (kd === 'piece') {
-    if (k === 'name') { if (!v.trim() || nameUsed(v, target.id)) { inp.classList.add('invalid'); $('#ppErr').textContent = v.trim() ? 'Nom déjà utilisé' : 'Nom obligatoire'; return false; } inp.classList.remove('invalid'); $('#ppErr').textContent = ''; }
-    if (k === 'num') { v = Math.round(v); if (numUsed(v, target.id)) { inp.classList.add('invalid'); $('#ppErr').textContent = 'Numéro déjà utilisé'; return false; } inp.classList.remove('invalid'); $('#ppErr').textContent = ''; }
+    if (k === 'name') { if (!v.trim() || nameUsed(v, target.id)) { inp.classList.add('invalid'); errBox.textContent = v.trim() ? 'Nom déjà utilisé' : 'Nom obligatoire'; return false; } inp.classList.remove('invalid'); errBox.textContent = ''; }
+    if (k === 'num') { v = Math.round(v); if (numUsed(v, target.id)) { inp.classList.add('invalid'); errBox.textContent = 'Numéro déjà utilisé'; return false; } inp.classList.remove('invalid'); errBox.textContent = ''; }
   }
   if (kd === 'surface' && k === 'idx') v = Math.max(1, Math.round(v));
   if (kd === 'liaison' && k === 'point') { target.details = Object.assign({}, target.details, { point: v.trim() }); return true; }
@@ -230,7 +234,39 @@ function wireProps(box, target) {
     const c = CY(inp.dataset.cycleColor);
     if (c) { checkpoint(); c.color = inp.value; changed(); }
   });
-  $$('[data-ca]', box).forEach(b => b.onclick = () => cycleAction(b.dataset.ca, b.dataset.cid));
+  $$('[data-ca]', box).forEach(b => b.onclick = () => cycleAction(b.dataset.ca, b.dataset.cid, b));
+  /* Arborescence du parcours : glisser-déposer pour réordonner les étapes. */
+  const tree = $('.cycle-tree', box);
+  if (tree && cycleDraft) {
+    let dragI = null;
+    tree.addEventListener('dragstart', e => {
+      const row = e.target.closest('.ct-row'); if (!row) return;
+      dragI = Number(row.dataset.i); row.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', String(dragI)); } catch {}
+    });
+    tree.addEventListener('dragend', () => {
+      dragI = null;
+      $$('.ct-row', tree).forEach(r => r.classList.remove('dragging', 'over'));
+    });
+    tree.addEventListener('dragover', e => {
+      if (dragI == null) return;
+      e.preventDefault();
+      const row = e.target.closest('.ct-row');
+      $$('.ct-row', tree).forEach(r => r.classList.toggle('over', r === row));
+    });
+    tree.addEventListener('drop', e => {
+      if (dragI == null) return;
+      e.preventDefault();
+      const row = e.target.closest('.ct-row');
+      const to = row != null ? Number(row.dataset.i) : cycleDraft.nodes.length - 1;
+      const from = dragI; dragI = null;
+      moveDraftNodeTo(from, to);
+    });
+  }
+  $$('[data-cycle-draft-color]', box).forEach(inp => inp.oninput = () => {
+    if (cycleDraft) { cycleDraft.color = inp.value; render(); autosave(); }
+  });
   $$('[data-cycle-visible]', box).forEach(inp => inp.onchange = () => {
     const c = CY(inp.dataset.cycleVisible);
     if (c) { checkpoint(); setCycleVisible(c, inp.checked); changed(); }
@@ -258,7 +294,7 @@ function wireProps(box, target) {
   $$('[data-torsor]', box).forEach(inp => {
     inp.addEventListener('focus', () => tcp = false);
     inp.addEventListener('input', () => {
-      if (!target || kindOf(target.id) !== 'liaison') return;
+      if (!target || !['liaison', 'cfg'].includes(kindOf(target.id))) return;
       if (!tcp) { checkpoint(); tcp = true; }
       target.torsor = Object.assign({}, target.torsor, { [inp.dataset.torsor]: inp.value });
       render(); autosave();
@@ -295,11 +331,12 @@ function propAction(a, t, btn) {
     case 'cnt-1': case 'cnt+1': checkpoint(); t.count = Math.max(2, t.count + (a === 'cnt+1' ? 1 : -1)); changed(); break;
     case 'front': { checkpoint(); const gs = S().groups; gs.splice(gs.indexOf(t), 1); gs.unshift(t); changed(); break; }
     case 'back': { checkpoint(); const gs = S().groups; gs.splice(gs.indexOf(t), 1); gs.push(t); changed(); break; }
-    case 'editcf': cfDialog(SF(t.a).pieceId, SF(t.b).pieceId, t.id); break;
+    case 'editcf': cfDialog(endPiece(t.a), endPiece(t.b), t.id); break;
     case 'loopcalc': closedLoopsDialog(); break;
     case 'cycles': setTool('cycle'); break;
     case 'cfs': setTool('cfg'); break;
-    case 'straight': checkpoint(); t.curved = false; t.bend = 0; changed(); break;
+    case 'straight': checkpoint(); t.curved = false; t.bend = 0; delete t.cps; changed(); break;
+    case 'curvereset': checkpoint(); delete t.cps; changed(); break;
     case 'circle': checkpoint(); { const r = Math.round((t.rx + t.ry) / 2); t.rx = r; t.ry = r; } changed(); break;
     case 'torsorreset': checkpoint(); delete t.torsor; changed(); break;
     case 'nameauto': checkpoint(); t.name = ''; changed(); break;

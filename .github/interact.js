@@ -63,11 +63,16 @@ function toggleCollapse(g) {
   sel.clear(); sel.add(g.id); changed();
 }
 $('#pickbar').addEventListener('click', e => {
+  const ca = e.target.closest('[data-ca]');
+  if (ca) { cycleAction(ca.dataset.ca, ca.dataset.cid, ca); return; }
   const b = e.target.closest('[data-pb]'); if (!b) return;
   if (b.dataset.pb === 'ok') {
     if (tool === 'spec') { if (editSpecId) endSpecEdit(); else commitSpec(); }
     else commitGroup();
   } else setTool('select');
+});
+$('#pickbar').addEventListener('input', e => {
+  if (e.target.dataset.cycleDraftColor != null && cycleDraft) { cycleDraft.color = e.target.value; render(); }
 });
 
 /* ===== Actions d'édition ===== */
@@ -162,11 +167,12 @@ function fitView() {
   renderView(); renderOverlay(); autosave();
 }
 
-/* ===== Souris ===== */
+/* ===== Souris / tactile ===== */
 function hitOf(e) {
   const specBend = e.target.closest('[data-spec-bend]'); if (specBend) return { kind: 'specBend', id: specBend.dataset.specBend, ti: specBend.dataset.ti };
   const bend = e.target.closest('[data-bend-id]'); if (bend) return { kind: 'bend', id: bend.dataset.bendId };
-  const curve = e.target.closest('[data-cycle-bend]'); if (curve) return { kind: 'cycleBend', id: curve.dataset.cycleBend, key: curve.dataset.cycleKey, edge: curve.dataset.cycleEdge };
+  const cp = e.target.closest('[data-cp-id]'); if (cp) return { kind: 'curveCp', id: cp.dataset.cpId, cp: Number(cp.dataset.cpI) };
+  const curve = e.target.closest('[data-cycle-bend]'); if (curve) return { kind: 'cycleBend', id: curve.dataset.cycleBend, key: curve.dataset.cycleKey, edge: curve.dataset.cycleEdge, cp: curve.dataset.cpI != null ? Number(curve.dataset.cpI) : null };
   const h = e.target.closest('[data-handle]'); if (h) return { kind: 'handle', id: h.dataset.pid, handle: h.dataset.handle };
   const n = e.target.closest('[data-id]'); if (!n) return null;
   return { kind: n.dataset.kind, id: n.dataset.id };
@@ -176,21 +182,35 @@ function colorKeyOf(h) { return h && ['piece', 'surface', 'liaison', 'group', 'c
 
 svg.addEventListener('contextmenu', e => e.preventDefault());
 let lastDown = { t: 0, x: 0, y: 0, key: null };
+/* Pincement à deux doigts (tablette / tactile) : zoom + déplacement de la vue. */
+const activePointers = new Map();
+let pinch = null;
 svg.addEventListener('pointerdown', e => {
+  if (e.pointerType === 'touch' || e.pointerType === 'pen') activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (e.pointerType === 'touch' && activePointers.size >= 2) {
+    if (drag) { drag = null; marquee = null; stage.classList.remove('panning'); }
+    const [p1, p2] = [...activePointers.values()];
+    const v = S().view;
+    pinch = { d0: Math.hypot(p2.x - p1.x, p2.y - p1.y) || 1, k0: v.k,
+      mx: (p1.x + p2.x) / 2, my: (p1.y + p2.y) / 2, vx: v.x, vy: v.y, rect: svg.getBoundingClientRect() };
+    return;
+  }
   if (!popupEl?._keep) closePopup();
   if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
   const pt = toWorld(e), h = hitOf(e);
   if (e.ctrlKey || e.metaKey || e.shiftKey || spaceDown || e.button !== 0) lastDown.t = 0;
-  if (e.button === 0 && tool === 'select' && !spaceDown && !e.ctrlKey && !e.metaKey && !e.shiftKey && !(h && ['gtoggle', 'bend', 'cycleBend', 'specBend', 'handle'].includes(h.kind))) {
+  if (e.button === 0 && tool === 'select' && !spaceDown && !e.ctrlKey && !e.metaKey && !e.shiftKey && !(h && ['gtoggle', 'bend', 'curveCp', 'cycleBend', 'specBend', 'handle'].includes(h.kind))) {
     const key = h ? h.kind + ':' + h.id : 'background';
     const now = performance.now(), isDbl = lastDown.t > 0 && key === lastDown.key && now - lastDown.t < 380 && Math.hypot(e.clientX - lastDown.x, e.clientY - lastDown.y) < 6;
     lastDown = { t: isDbl ? 0 : now, x: e.clientX, y: e.clientY, key };
     if (isDbl) { drag = null; marquee = null; onDouble(h, pt, e); return; }
   }
-  if (e.button === 1 || e.button === 2 || (e.button === 0 && (spaceDown || (tool === 'select' && !h && !e.shiftKey)))) {
+  if (e.button === 1 || e.button === 2 || (e.button === 0 && (spaceDown || (tool === 'select' && !h && !e.shiftKey) || (tool === 'cycle' && !h)))) {
     e.preventDefault(); const v = S().view;
     drag = { type: 'pan', sx: e.clientX, sy: e.clientY, vx: v.x, vy: v.y, moved: false,
-      clearOnClick: e.button === 0 && !spaceDown && !e.ctrlKey && !e.metaKey }; stage.classList.add('panning');
+      clearOnClick: tool === 'select' && e.button === 0 && !spaceDown && !e.ctrlKey && !e.metaKey,
+      hint: tool === 'cycle' && e.button === 0 && !spaceDown ? 'Choisissez une surface, une liaison ou un groupe de références (pas une pièce).' : '' };
+    stage.classList.add('panning');
     svg.setPointerCapture(e.pointerId); return;
   }
   if (e.button !== 0) return;
@@ -201,6 +221,16 @@ svg.addEventListener('pointerdown', e => {
     if(ref) { drag={type:'specBend',ref,start:pt,snap:snapshot(),moved:false}; return; }
     const sp=(S().isoSpecs||[]).find(x=>x.id===h.id), t=sp&&(sp.targets||[])[+h.ti];
     if(sp&&t) drag={type:'specBend',target:t,start:pt,snap:snapshot(),moved:false};
+    return;
+  }
+  /* Courbes de cycle : déplaçables dans tous les outils ; un clic sans glisser
+     sélectionne le cycle (poignées Bézier et panneau). */
+  if (h && h.kind === 'cycleBend') {
+    const cycle = h.id === 'draft' ? cycleDraft : CY(h.id);
+    const key = h.key != null ? h.key : 'free:' + h.edge;
+    const geom = cycleCurveChords.get((cycle?.id || 'draft') + '|' + key);
+    if (!cycle || !geom) return;
+    drag = { type: h.cp != null ? 'cycleCp' : 'cycleBend', cycle, key, cp: h.cp, edge: h.edge != null && h.edge !== '' ? Number(h.edge) : null, geom, start: pt, snap: snapshot(), moved: false };
     return;
   }
   if (tool === 'isoRef') {
@@ -237,7 +267,8 @@ svg.addEventListener('pointerdown', e => {
   }
   if (tool === 'cycle') {
     if (h && (h.kind === 'surface' || (['group', 'glabel'].includes(h.kind) && G(h.id)?.kind === 'ref'))) pickCycleNode(h.id, e.ctrlKey || e.metaKey);
-    else toast('Choisissez une surface ou un groupe de références (pas une pièce).');
+    else if (h && ['liaison', 'llabel', 'torseur'].includes(h.kind)) pickCycleLink(L(h.id));
+    else toast('Choisissez une surface, une liaison ou un groupe de références (pas une pièce).');
     return;
   }
   if (isGroupTool()) {
@@ -301,11 +332,13 @@ svg.addEventListener('pointerdown', e => {
     return;
   }
   if (tool === 'cfg') {
-    /* Chaque extrémité peut être une pièce (nouvelle surface) ou une surface existante. */
-    const pidOf = id => { const f = SF(id); return f ? f.pieceId : id; };
-    if (!h || !['piece', 'surface', 'nominal'].includes(h.kind)) return toast('Choisissez deux pièces ou deux surfaces, sur deux pièces différentes. Développez les groupes fonctionnels si nécessaire.');
-    const id = h.kind === 'surface' ? h.id : pieceOfHit(h);
-    if (!id) return toast('Choisissez une pièce ou une surface pour cette extrémité.');
+    /* Chaque extrémité peut être une pièce (nouvelle surface), une surface
+       existante ou un groupe de référence (référence ISO). */
+    const pidOf = id => endPiece(id);
+    const isRefGroup = h && h.kind === 'group' && G(h.id)?.kind === 'ref';
+    if (!h || !(isRefGroup || ['piece', 'surface', 'nominal'].includes(h.kind))) return toast('Choisissez deux pièces, deux surfaces ou deux groupes de référence, sur deux pièces différentes. Développez les groupes fonctionnels si nécessaire.');
+    const id = (h.kind === 'surface' || isRefGroup) ? h.id : pieceOfHit(h);
+    if (!id) return toast('Choisissez une pièce, une surface ou un groupe de référence pour cette extrémité.');
     if (pick.length === 1) {
       const other = pick[0];
       if (other === id) return toast('Choisissez une extrémité différente pour la CF.');
@@ -314,7 +347,8 @@ svg.addEventListener('pointerdown', e => {
     pick.push(id);
     if (pick.length === 2) {
       const [ra, rb] = pick; pick = []; setTool('select');
-      cfDialog(pidOf(ra), pidOf(rb), null, { a: SF(ra) ? ra : null, b: SF(rb) ? rb : null });
+      const endRef = id => (SF(id) || refGroupOf(id)) ? id : null;
+      cfDialog(pidOf(ra), pidOf(rb), null, { a: endRef(ra), b: endRef(rb) });
     } else { render(); renderProps(); }
     updateTip(); return;
   }
@@ -348,12 +382,8 @@ svg.addEventListener('pointerdown', e => {
     drag = { type: 'bend', l: L(h.id) || C(h.id), start: pt, snap: snapshot(), moved: false };
     return;
   }
-  if (h && h.kind === 'cycleBend') {
-    const cycle = h.id === 'draft' ? cycleDraft : CY(h.id);
-    const key = h.key != null ? h.key : 'free:' + h.edge;
-    const geom = cycleCurveChords.get((cycle?.id || 'draft') + '|' + key);
-    if (!cycle || !geom) return;
-    drag = { type: 'cycleBend', cycle, key, edge: h.edge != null ? Number(h.edge) : null, geom, start: pt, snap: snapshot(), moved: false };
+  if (h && h.kind === 'curveCp') {
+    drag = { type: 'curveCp', l: L(h.id) || C(h.id), index: h.cp, start: pt, snap: snapshot(), moved: false };
     return;
   }
   if (h && h.kind === 'gtoggle') { toggleCollapse(G(h.id)); return; }
@@ -397,12 +427,13 @@ svg.addEventListener('pointerdown', e => {
 
 function startMove(pt) {
   const s = S(), mp = new Set();
+  const lockP = !!doc.settings.lockPieces, lockS = !!doc.settings.lockSurfaces;
   for (const id of sel) {
     const k = kindOf(id);
-    if (k === 'piece') mp.add(id);
-    if (k === 'group') { const g = G(id); if (g.kind !== 'ref') g.members.forEach(m => mp.add(m)); }
+    if (k === 'piece' && !lockP) mp.add(id);
+    if (k === 'group') { const g = G(id); if (g.kind !== 'ref' && !lockP) g.members.forEach(m => mp.add(m)); }
   }
-  const surfs = [...sel].map(SF).filter(x => x && !mp.has(x.pieceId));
+  const surfs = [...sel].map(SF).filter(x => x && !mp.has(x.pieceId) && !lockS);
   const attached = [
     ...(S().isoRefs || []).filter(x => mp.has(x.ownerPieceId || (x.targetKind === 'piece' ? x.targetId : ''))).map(o => ({ kind: 'isoRef', o, x: o.x, y: o.y, ex: o.elbowX, ey: o.elbowY })),
     ...(S().isoSpecs || []).filter(x => mp.has(x.ownerPieceId || (x.targets || []).find(t => t.targetKind === 'piece')?.targetId)).map(o => ({ kind: 'isoSpec', o, x: o.x, y: o.y, elbows: (o.targets || []).map(t => [t.elbowX, t.elbowY]) }))
@@ -414,10 +445,25 @@ function startMove(pt) {
     notes: [...sel].map(id => (S().notes || []).find(n => n.id === id)).filter(Boolean).map(n => [n, n.x, n.y]),
     attached
   };
+  /* Tout est verrouillé : on ne bouge rien, mais on explique pourquoi. */
+  if (!drag.pieces.length && !drag.surfs.length && !drag.notes.length && !drag.attached.length && sel.size) {
+    drag = null;
+    toast('Position verrouillée — boutons « Pièces » / « Surfaces » de l’accueil pour déverrouiller.');
+  }
 }
 
 svg.addEventListener('pointermove', e => {
   if (typeof Collab !== 'undefined') Collab.trackCursor(e);
+  if (activePointers.has(e.pointerId)) activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pinch && activePointers.size >= 2) {
+    const [p1, p2] = [...activePointers.values()];
+    const d = Math.hypot(p2.x - p1.x, p2.y - p1.y) || 1, mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2;
+    const v = S().view, k = clampN(pinch.k0 * d / pinch.d0, 0.08, 6);
+    const wx = (pinch.mx - pinch.rect.left - pinch.vx) / pinch.k0, wy = (pinch.my - pinch.rect.top - pinch.vy) / pinch.k0;
+    v.k = k; v.x = (mx - pinch.rect.left) - wx * k; v.y = (my - pinch.rect.top) - wy * k;
+    renderView(); renderOverlay();
+    return;
+  }
   if (!drag) return;
   const pt = toWorld(e);
   if (drag.type === 'pan') {
@@ -528,15 +574,60 @@ svg.addEventListener('pointermove', e => {
     if (drag.edge != null) { if (drag.cycle.edges[drag.edge]) drag.cycle.edges[drag.edge].bend = off; }
     else { drag.cycle.bends = drag.cycle.bends || {}; drag.cycle.bends[drag.key] = off; }
     render();
+    return;
+  }
+  if (drag.type === 'curveCp' || drag.type === 'cycleCp') {
+    if (!drag.moved && Math.hypot(pt.x - drag.start.x, pt.y - drag.start.y) * S().view.k < 3) return;
+    if (!drag.moved) { checkpoint(drag.snap); drag.moved = true; }
+    const g = drag.type === 'curveCp' ? linkGeom(drag.l) : drag.geom;
+    if (!g) return;
+    const a = drag.type === 'curveCp' ? g.ctrl[0] : g.a, b = drag.type === 'curveCp' ? g.ctrl[3] : g.b;
+    const dx = b.x - a.x, dy = b.y - a.y, len2 = dx * dx + dy * dy || 1, len = Math.sqrt(len2);
+    const nx = -dy / len, ny = dx / len;
+    const cpv = {
+      u: Math.round(((pt.x - a.x) * dx + (pt.y - a.y) * dy) / len2 * 1000) / 1000,
+      v: Math.round(((pt.x - a.x) * nx + (pt.y - a.y) * ny) * 10) / 10
+    };
+    if (drag.type === 'curveCp') {
+      const cur = ensureCurveCps(drag.l.cps, drag.l.bend);
+      cur[drag.index] = cpv; drag.l.cps = cur;
+    } else if (drag.edge != null) {
+      const e = drag.cycle.edges[drag.edge]; if (!e) return;
+      e.cps = ensureCurveCps(e.cps, Number.isFinite(e.bend) ? e.bend : null);
+      e.cps[drag.cp] = cpv;
+    } else {
+      drag.cycle.cps = drag.cycle.cps || {};
+      const cur = ensureCurveCps(drag.cycle.cps[drag.key], cycleBendValue(drag.cycle, drag.key));
+      cur[drag.cp] = cpv; drag.cycle.cps[drag.key] = cur;
+    }
+    render();
+    return;
   }
 });
+/* Complète une paire de points Bézier : les poignées manquantes prennent la
+   position de la courbe simple équivalente. */
+function ensureCurveCps(cps, bend) {
+  const p = Array.isArray(cps) && cps.length === 2 ? cps.slice() : [null, null];
+  const k = Number.isFinite(bend) ? bend : 0;
+  if (!p[0] || !Number.isFinite(p[0].u)) p[0] = { u: 1 / 3, v: Math.round(k * 2 / 3 * 10) / 10 };
+  if (!p[1] || !Number.isFinite(p[1].u)) p[1] = { u: 2 / 3, v: Math.round(k * 2 / 3 * 10) / 10 };
+  return p;
+}
 
 svg.addEventListener('pointerup', e => {
+  activePointers.delete(e.pointerId);
+  if (activePointers.size < 2 && pinch) { pinch = null; autosave(); }
   if (!drag) return;
   const d = drag; drag = null; stage.classList.remove('panning');
   if (d.type === 'pan') {
     if (!d.moved && d.clearOnClick) { sel.clear(); renderOverlay(); renderProps(); }
+    if (!d.moved && d.hint) toast(d.hint);
     autosave(); return;
+  }
+  /* Clic sans glisser sur une courbe de cycle : sélectionner le cycle (ses
+     poignées Bézier apparaissent alors). */
+  if (d.type === 'cycleBend' && !d.moved && d.cycle?.id) {
+    sel.clear(); sel.add(d.cycle.id); render(); renderProps(); return;
   }
   if (d.type === 'marquee') {
     const m = marquee; marquee = null;
@@ -551,7 +642,9 @@ svg.addEventListener('pointerup', e => {
   }
   if (d.moved) changed(); else render();
 });
-svg.addEventListener('pointercancel', () => {
+svg.addEventListener('pointercancel', e => {
+  if (e) activePointers.delete(e.pointerId);
+  pinch = null;
   const d = drag; drag = null; marquee = null; stage.classList.remove('panning');
   if (d?.type === 'pan') autosave(); else if (d) changed();
 });
@@ -582,10 +675,14 @@ function onDouble(h, pt, e) {
   if (h && h.kind === 'plabel') { const p = P(h.id); checkpoint(); p.lab = null; changed(); return; }
   if (h && h.kind === 'group' && G(h.id).kind === 'fonc') return toggleCollapse(G(h.id));
   if (!h || (h.kind === 'group' && G(h.id).kind === 'rep')) return pieceDialog(pt);
-  if (h.kind === 'piece') { setTool('liaison'); pick = [h.id]; render(); updateTip(); return; }
+  if (h.kind === 'piece') return pieceEditPopup(P(h.id));
   if (h.kind === 'liaison' || h.kind === 'llabel') { const l = L(h.id); return liaisonDialog(SF(l.a).pieceId, SF(l.b).pieceId, l.id); }
-  if (h.kind === 'torseur') { const l = L(h.id); return l ? liaisonDialog(SF(l.a).pieceId, SF(l.b).pieceId, l.id) : null; }
-  if (h.kind === 'cfg') { const c = C(h.id); return cfDialog(SF(c.a).pieceId, SF(c.b).pieceId, c.id); }
+  if (h.kind === 'torseur') {
+    const l = L(h.id);
+    if (l) return liaisonDialog(SF(l.a).pieceId, SF(l.b).pieceId, l.id);
+    const c = C(h.id); return c ? cfDialog(endPiece(c.a), endPiece(c.b), c.id) : null;
+  }
+  if (h.kind === 'cfg') { const c = C(h.id); return cfDialog(endPiece(c.a), endPiece(c.b), c.id); }
   if (h.kind === 'surface') return surfaceNameDialog(h.id);
   if (h.kind === 'group' || h.kind === 'cfg' || h.kind === 'surface') { const i = $('#props [data-k=name]'); if (i) { i.focus(); i.select(); } }
 }
@@ -604,7 +701,12 @@ document.addEventListener('keydown', e => {
   const k = e.key.toLowerCase(), ctrl = e.ctrlKey || e.metaKey;
   if (e.key === ' ') { spaceDown = true; e.preventDefault(); return; }
   if (ctrl) {
-    if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+    if (k === 'z' && !e.shiftKey) {
+      e.preventDefault();
+      /* Pendant la création d'un cycle, Ctrl+Z recule d'une étape. */
+      if (tool === 'cycle' && cycleDraft) return cycleAction('back');
+      undo();
+    }
     else if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); redo(); }
     else if (k === 'c') { e.preventDefault(); copySel(); }
     else if (k === 'v') { e.preventDefault(); pasteClip(); }
@@ -615,7 +717,7 @@ document.addEventListener('keydown', e => {
     else if (k === 'e') { e.preventDefault(); exportPNG(); }
     return;
   }
-  if (e.key === 'Escape') { closePopup(); sel.clear(); setTool('select'); return; }
+  if (e.key === 'Escape') { closePopup(); closePiecePopup(); sel.clear(); setTool('select'); return; }
   if (tool === 'cycle' && e.key === 'Backspace') { e.preventDefault(); cycleAction('back'); return; }
   if (tool === 'cycle' && e.key === 'Enter') { e.preventDefault(); saveCycleDialog(); return; }
   if (tool === 'spec' && e.key === 'Enter') { e.preventDefault(); if (editSpecId) endSpecEdit(); else commitSpec(); return; }
@@ -626,7 +728,9 @@ document.addEventListener('keydown', e => {
   if (e.key === '+' || e.key === '=') { const r = stage.getBoundingClientRect(); zoomAt(1.2, r.width / 2, r.height / 2); return; }
   if (e.key === '-') { const r = stage.getBoundingClientRect(); zoomAt(1 / 1.2, r.width / 2, r.height / 2); return; }
   if (e.key.startsWith('Arrow') && sel.size) {
-    e.preventDefault(); const st = e.shiftKey ? 10 : 1;
+    e.preventDefault();
+    if (doc.settings.lockPieces) return toast('Pièces verrouillées — bouton « Pièces » de l’accueil pour déverrouiller.');
+    const st = e.shiftKey ? 10 : 1;
     const dx = e.key === 'ArrowLeft' ? -st : e.key === 'ArrowRight' ? st : 0, dy = e.key === 'ArrowUp' ? -st : e.key === 'ArrowDown' ? st : 0;
     checkpoint();
     const movedPieces = new Set([...sel].map(P).filter(Boolean).map(p => p.id));
@@ -656,8 +760,14 @@ document.addEventListener('keyup', e => { if (e.key === ' ') spaceDown = false; 
 document.addEventListener('pointerdown', e => { if (popupEl && !popupEl._keep && !e.composedPath().some(n => n === popupEl || n === svg)) closePopup(); });
 
 /* ===== Barre d'outils ===== */
+/* Onglets du ruban : un seul panneau visible à la fois */
+function showRibbon(name) {
+  $$('#toolbar [data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  $$('#toolbar [data-panel]').forEach(p => { p.hidden = p.dataset.panel !== name; });
+}
 $('#toolbar').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.tab) return showRibbon(b.dataset.tab);
   if (b.dataset.tool) {
     const t = b.dataset.tool;
     if (t === 'piece') { pieceDialog(null); return; }
@@ -698,6 +808,9 @@ async function toolbarAction(a) {
     case 'zoomout': zoomAt(1 / 1.2, r.width / 2, r.height / 2); break;
     case 'fit': fitView(); break;
     case 'grid': doc.settings.grid = !doc.settings.grid; changed(false); break;
+    case 'hints': doc.settings.showHints = doc.settings.showHints === false; changed(false); updateTip(); break;
+    case 'isorefs': doc.settings.showIsoRefs = doc.settings.showIsoRefs === false; changed(false); break;
+    case 'specs': doc.settings.showSpecs = doc.settings.showSpecs === false; changed(false); break;
     case 'surfaces': doc.settings.showSurfaces = doc.settings.showSurfaces === false; changed(false); break;
     case 'details': checkpoint(); doc.settings.showDetails = !doc.settings.showDetails; changed(); break;
     case 'torseurs': checkpoint(); doc.settings.showTorseurs = !doc.settings.showTorseurs; changed(); break;
@@ -708,6 +821,9 @@ async function toolbarAction(a) {
       changed(); break;
     }
     case 'settings': settingsDialog(); break;
+    case 'lockpieces': checkpoint(); doc.settings.lockPieces = !doc.settings.lockPieces; changed(); toast(doc.settings.lockPieces ? 'Pièces verrouillées : elles ne bougeront plus par mégarde.' : 'Pièces déverrouillées.'); break;
+    case 'locksurfaces': checkpoint(); doc.settings.lockSurfaces = !doc.settings.lockSurfaces; changed(); toast(doc.settings.lockSurfaces ? 'Surfaces verrouillées : elles ne bougeront plus par mégarde.' : 'Surfaces déverrouillées.'); break;
+    case 'sharelink': shareLinkDialog(); break;
     case 'github': window.open('https://github.com/GillesDLT/Graphes-des-contacts', '_blank', 'noopener'); break;
     case 'referenceimage': referenceImageAction('open'); break;
     case 'help': helpDialog(); break;
@@ -1008,9 +1124,35 @@ async function copyImage() {
   catch (e) { toast('Copie impossible : utilisez Export PNG'); }
 }
 
+/* ===== Préférences d'interface (par navigateur, hors document) ===== */
+const UI_KEY = 'graphe.ui.v1';
+const uiPrefs = (() => { try { return JSON.parse(localStorage.getItem(UI_KEY) || 'null') || {}; } catch { return {}; } })();
+function saveUiPrefs() { try { localStorage.setItem(UI_KEY, JSON.stringify(uiPrefs)); } catch {} }
+function applyUiPrefs() {
+  document.body.classList.toggle('ribbon-collapsed', !!uiPrefs.ribbonCollapsed);
+  if (uiPrefs.propsMode === 'float') uiPrefs.propsMode = 'docked'; // mode flottant retiré
+  const hidden = uiPrefs.propsMode === 'hidden';
+  document.body.classList.toggle('props-hidden', hidden);
+  const chev = $('#ribbonToggle');
+  if (chev) {
+    chev.textContent = uiPrefs.ribbonCollapsed ? '⌄' : '⌃';
+    chev.title = (uiPrefs.ribbonCollapsed ? 'Afficher' : 'Réduire') + ' la barre d’outils (plus grand écran)';
+    chev.setAttribute('aria-expanded', String(!uiPrefs.ribbonCollapsed));
+  }
+  const pt = $('#propsToggle');
+  if (pt) {
+    pt.classList.toggle('active', !hidden);
+    pt.setAttribute('aria-pressed', String(!hidden));
+    pt.title = (hidden ? 'Afficher' : 'Cacher') + ' le panneau de propriétés';
+  }
+}
+$('#ribbonToggle').addEventListener('click', () => { uiPrefs.ribbonCollapsed = !uiPrefs.ribbonCollapsed; saveUiPrefs(); applyUiPrefs(); render(); });
+$('#propsToggle').addEventListener('click', () => { uiPrefs.propsMode = uiPrefs.propsMode === 'hidden' ? 'docked' : 'hidden'; saveUiPrefs(); applyUiPrefs(); render(); });
+
 /* ===== Démarrage ===== */
 $('#curColor').addEventListener('input', () => { if (tool !== 'paint') setTool('paint'); });
 window.addEventListener('resize', () => render());
+applyUiPrefs();
 (function init() {
   let loadError = null;
   (async () => {
@@ -1023,6 +1165,8 @@ window.addEventListener('resize', () => render());
       toast('Document non chargé : ' + loadError.message + ' — un nouveau projet a été ouvert.');
       $('#props').prepend(el(`<p class="err">Document non chargé : ${esc(loadError.message)} Un nouveau projet a été ouvert ; la copie précédente reste dans le stockage du navigateur.</p>`));
     }
-    projectsDialog();
+    /* Lien de partage #d=… : le document est importé dans un nouveau projet. */
+    const shared = await importSharedDoc();
+    if (!shared) projectsDialog();
   })();
 })();

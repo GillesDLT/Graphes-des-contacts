@@ -3,12 +3,13 @@
 const ARROW = '\u20D7';
 function vec(v) { v = (v || '').trim(); return v ? v + ARROW : '?'; }
 /* Les champs vectoriels indexés restent en texte brut ; l'indice est interprété au rendu. */
+const SUB_END = /[\s(),;\u20D7±+−×Ø⌀]/;
 function parseVec(str) {
   const segs = [], ch = [...String(str ?? '')];
   const indexed = /^([^\s(),_\u20D7]+)_([^\s(),\u20D7]+)\u20D7/u;
   const plain = text => {
     const last = segs[segs.length - 1];
-    if (last && !last.v) last.t += text; else segs.push({ t: text, v: false });
+    if (last && !last.v && !last.sub) last.t += text; else segs.push({ t: text, v: false });
   };
   for (let i = 0; i < ch.length; i++) {
     const match = ch.slice(i).join('').match(indexed);
@@ -21,6 +22,12 @@ function parseVec(str) {
     }
     if (ch[i] === ARROW) continue;
     if (ch[i + 1] === ARROW) { segs.push({ t: ch[i], v: true }); i++; continue; }
+    /* Texte quelconque : « _ » ouvre un indice qui va jusqu’au prochain blanc ou délimiteur. */
+    if (ch[i] === '_' && i > 0 && ch[i + 1] && !SUB_END.test(ch[i + 1])) {
+      let j = i + 1;
+      while (j < ch.length && !SUB_END.test(ch[j])) j++;
+      segs.push({ t: '', v: false, sub: ch.slice(i + 1, j).join('') }); i = j - 1; continue;
+    }
     plain(ch[i]);
   }
   return segs;
@@ -28,7 +35,7 @@ function parseVec(str) {
 /* HTML : lettre en italique surmontée d'une vraie flèche (CSS) */
 function vecHTML(s) {
   return parseVec(s).map(g => {
-    if (!g.v) return esc(g.t);
+    if (!g.v) return esc(g.t) + (g.sub ? `<sub class="vec-sub">${esc(g.sub)}</sub>` : '');
     const base = `<span class="vec">${esc(g.t)}</span>`;
     return g.sub ? `<span class="vec-indexed">${base}<sub class="vec-sub">${esc(g.sub)}</sub></span>` : base;
   }).join('');
@@ -44,21 +51,25 @@ function richSegmentMetrics(g, fs) {
 function richTextWidth(str, fs) {
   return parseVec(str).reduce((width, g) => width + richSegmentMetrics(g, fs).width, 0);
 }
-function richTextSVG(str, x, y, fs, attrs = '', color = '#1f1f1f', halo = true) {
+/* opts : anchor ('middle' par défaut, ou 'start' = x est le bord gauche), family (police SVG). */
+function richTextSVG(str, x, y, fs, attrs = '', color = '#1f1f1f', halo = true, opts = {}) {
   const segs = parseVec(str), pad = fs * 0.09;
   const metrics = segs.map(g => richSegmentMetrics(g, fs));
-  let cx = x - metrics.reduce((width, m) => width + m.width, 0) / 2;
+  const total = metrics.reduce((width, m) => width + m.width, 0);
+  let cx = opts.anchor === 'start' ? x : x - total / 2;
   const x0 = cx; let arrows = '';
   const body = segs.map((g, i) => {
     const sx = cx; cx += metrics[i].width;
-    if (!g.v) return `<tspan x="${r1(sx)}" y="${r1(y)}">${esc(g.t)}</tspan>`;
+    if (!g.v) return (g.t ? `<tspan x="${r1(sx)}" y="${r1(y)}">${esc(g.t)}</tspan>` : '') +
+      (g.sub ? `<tspan x="${r1(sx + metrics[i].base)}" y="${r1(y + fs * VECTOR_SUB_DROP)}" font-size="${r1(fs * VECTOR_SUB_SCALE)}" data-vector-sub="1">${esc(g.sub)}</tspan>` : '');
     const bx = sx + pad, ay = y - fs * 0.86, a0 = bx + fs * 0.12, a1 = bx + metrics[i].base + fs * 0.1, h = fs * 0.15;
     arrows += `M${r1(a0)},${r1(ay)}H${r1(a1)}M${r1(a1 - h * 1.3)},${r1(ay - h)}L${r1(a1)},${r1(ay)}L${r1(a1 - h * 1.3)},${r1(ay + h)}`;
     return `<tspan x="${r1(bx)}" y="${r1(y)}" font-style="italic">${esc(g.t)}</tspan>` +
       (g.sub ? `<tspan x="${r1(bx + metrics[i].base)}" y="${r1(y + fs * VECTOR_SUB_DROP)}" font-size="${fs * VECTOR_SUB_SCALE}" font-style="normal" data-vector-sub="1">${esc(g.sub)}</tspan>` : '');
   }).join('');
   const haloAttr = halo ? ` stroke="#ffffff" stroke-width="4" stroke-linejoin="round" paint-order="stroke"` : '';
-  let out = `<text x="${r1(x0)}" y="${r1(y)}" font-size="${fs}" fill="${color}"${haloAttr} ${attrs}>${body}</text>`;
+  const family = opts.family ? ` font-family="${opts.family}"` : '';
+  let out = `<text x="${r1(x0)}" y="${r1(y)}" font-size="${fs}" fill="${color}"${family}${haloAttr} ${attrs}>${body}</text>`;
   if (arrows) out += `<path d="${arrows}" fill="none" stroke="${color}" stroke-width="${r1(Math.max(0.9, fs / 13))}" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>`;
   return out;
 }
