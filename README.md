@@ -279,12 +279,14 @@ affichage noir ou couleur.
 Le panneau **Cycles** permet de changer les couleurs, d’afficher ou de masquer
 les cycles, de les extraire dans des feuilles indépendantes et de **modifier le
 parcours** d’un cycle existant (« Modifier le parcours… »). Le parcours est
-édité dans une **arborescence** : monter ou descendre une étape (↑ ↓, les
-liaisons sont recalculées), en **insérer une à la position voulue** (＋ puis
-cliquer la surface sur le graphe), en supprimer une (✕, les voisins sont
-reconnectés). Lorsqu’un élément est partagé, le dernier cycle affiché est
-prioritaire ; plusieurs cycles sur un même lien sont tracés **côte à côte** ;
-l’ordre est indiqué dans le panneau.
+édité dans une **arborescence** : monter ou descendre une étape (↑ ↓ ou
+**glisser-déposer**, les liaisons sont recalculées), en **insérer une à la
+position voulue** (＋ puis cliquer la surface sur le graphe), en supprimer une
+(✕, les voisins sont reconnectés). Un **clic sur une liaison** ajoute
+directement la surface concernée, **Ctrl+Z** recule d’une étape, et **glisser
+le fond** déplace la vue pendant la création. Lorsqu’un élément est partagé,
+le dernier cycle affiché est prioritaire ; plusieurs cycles sur un même lien
+sont tracés **côte à côte** ; l’ordre est indiqué dans le panneau.
 
 ## ISO GPS : références et spécifications
 
@@ -374,8 +376,10 @@ Chaque **projet** est un document complet (avec ses feuilles), enregistré
 automatiquement dans le navigateur. La liste des projets s'ouvre au démarrage
 et au rechargement ; le bouton **🗂 nom du projet** permet d'y revenir :
 
-- **Ouvrir** bascule d'un projet à l'autre sans rien perdre ;
-- **＋ Nouveau projet** crée un document vide ;
+- **cliquer un projet pour l'ouvrir** (ou Entrée au clavier) ; le projet
+  courant est marqué « ✓ ouvert » ;
+- la **recherche** filtre la liste par nom ;
+- **＋ Nouveau projet** crée un document vide, **⤒ Importer** ouvre un `.json` ;
 - **✎** renomme, **⧉** duplique, **⤓** enregistre en `.json`, **🗑** supprime ;
 - la poignée **⠿** permet de **ranger la liste dans l'ordre choisi**, par
   glisser-déposer.

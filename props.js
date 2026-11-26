@@ -235,6 +235,35 @@ function wireProps(box, target) {
     if (c) { checkpoint(); c.color = inp.value; changed(); }
   });
   $$('[data-ca]', box).forEach(b => b.onclick = () => cycleAction(b.dataset.ca, b.dataset.cid, b));
+  /* Arborescence du parcours : glisser-déposer pour réordonner les étapes. */
+  const tree = $('.cycle-tree', box);
+  if (tree && cycleDraft) {
+    let dragI = null;
+    tree.addEventListener('dragstart', e => {
+      const row = e.target.closest('.ct-row'); if (!row) return;
+      dragI = Number(row.dataset.i); row.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', String(dragI)); } catch {}
+    });
+    tree.addEventListener('dragend', () => {
+      dragI = null;
+      $$('.ct-row', tree).forEach(r => r.classList.remove('dragging', 'over'));
+    });
+    tree.addEventListener('dragover', e => {
+      if (dragI == null) return;
+      e.preventDefault();
+      const row = e.target.closest('.ct-row');
+      $$('.ct-row', tree).forEach(r => r.classList.toggle('over', r === row));
+    });
+    tree.addEventListener('drop', e => {
+      if (dragI == null) return;
+      e.preventDefault();
+      const row = e.target.closest('.ct-row');
+      const to = row != null ? Number(row.dataset.i) : cycleDraft.nodes.length - 1;
+      const from = dragI; dragI = null;
+      moveDraftNodeTo(from, to);
+    });
+  }
   $$('[data-cycle-draft-color]', box).forEach(inp => inp.oninput = () => {
     if (cycleDraft) { cycleDraft.color = inp.value; render(); autosave(); }
   });

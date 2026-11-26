@@ -292,7 +292,7 @@ const SPEC_SYMBOLS = [
   ['pline', '\u2312', 'Profil d’une ligne'],
   ['psurf', '\u2313', 'Profil d’une surface'],
   ['perp', '\u27C2', 'Perpendicularité'],
-  ['angularity', '\u2220', 'Angulosité'],
+  ['angularity', '\u2220', 'Inclinaison'],
   ['parallel', '\u2225', 'Parallélisme'],
   ['position', '\u2316', 'Position'],
   ['coax', '\u25CE', 'Coaxialité / concentricité'],
@@ -507,7 +507,7 @@ function specAnnotationSVG(spec) {
 }
 const SPEC_COMPLEMENT_SYMBOLS = [
   ['sym', '\u232F', 'Symétrie'], ['para', '\u2225', 'Parallélisme'],
-  ['perpen', '\u27C2', 'Perpendicularité'], ['angle', '\u2220', 'Angulosité']
+  ['perpen', '\u27C2', 'Perpendicularité'], ['angle', '\u2220', 'Inclinaison']
 ];
 const SPEC_COMPLEMENT_CHARS = new Map(SPEC_COMPLEMENT_SYMBOLS.map(([id, ch]) => [id, ch]));
 function specComplementaryCellSVG(spec, id, x) {

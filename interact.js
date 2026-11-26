@@ -205,10 +205,12 @@ svg.addEventListener('pointerdown', e => {
     lastDown = { t: isDbl ? 0 : now, x: e.clientX, y: e.clientY, key };
     if (isDbl) { drag = null; marquee = null; onDouble(h, pt, e); return; }
   }
-  if (e.button === 1 || e.button === 2 || (e.button === 0 && (spaceDown || (tool === 'select' && !h && !e.shiftKey)))) {
+  if (e.button === 1 || e.button === 2 || (e.button === 0 && (spaceDown || (tool === 'select' && !h && !e.shiftKey) || (tool === 'cycle' && !h)))) {
     e.preventDefault(); const v = S().view;
     drag = { type: 'pan', sx: e.clientX, sy: e.clientY, vx: v.x, vy: v.y, moved: false,
-      clearOnClick: e.button === 0 && !spaceDown && !e.ctrlKey && !e.metaKey }; stage.classList.add('panning');
+      clearOnClick: tool === 'select' && e.button === 0 && !spaceDown && !e.ctrlKey && !e.metaKey,
+      hint: tool === 'cycle' && e.button === 0 && !spaceDown ? 'Choisissez une surface, une liaison ou un groupe de références (pas une pièce).' : '' };
+    stage.classList.add('panning');
     svg.setPointerCapture(e.pointerId); return;
   }
   if (e.button !== 0) return;
@@ -265,7 +267,8 @@ svg.addEventListener('pointerdown', e => {
   }
   if (tool === 'cycle') {
     if (h && (h.kind === 'surface' || (['group', 'glabel'].includes(h.kind) && G(h.id)?.kind === 'ref'))) pickCycleNode(h.id, e.ctrlKey || e.metaKey);
-    else toast('Choisissez une surface ou un groupe de références (pas une pièce).');
+    else if (h && ['liaison', 'llabel', 'torseur'].includes(h.kind)) pickCycleLink(L(h.id));
+    else toast('Choisissez une surface, une liaison ou un groupe de références (pas une pièce).');
     return;
   }
   if (isGroupTool()) {
@@ -618,6 +621,7 @@ svg.addEventListener('pointerup', e => {
   const d = drag; drag = null; stage.classList.remove('panning');
   if (d.type === 'pan') {
     if (!d.moved && d.clearOnClick) { sel.clear(); renderOverlay(); renderProps(); }
+    if (!d.moved && d.hint) toast(d.hint);
     autosave(); return;
   }
   /* Clic sans glisser sur une courbe de cycle : sélectionner le cycle (ses
@@ -697,7 +701,12 @@ document.addEventListener('keydown', e => {
   const k = e.key.toLowerCase(), ctrl = e.ctrlKey || e.metaKey;
   if (e.key === ' ') { spaceDown = true; e.preventDefault(); return; }
   if (ctrl) {
-    if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+    if (k === 'z' && !e.shiftKey) {
+      e.preventDefault();
+      /* Pendant la création d'un cycle, Ctrl+Z recule d'une étape. */
+      if (tool === 'cycle' && cycleDraft) return cycleAction('back');
+      undo();
+    }
     else if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); redo(); }
     else if (k === 'c') { e.preventDefault(); copySel(); }
     else if (k === 'v') { e.preventDefault(); pasteClip(); }

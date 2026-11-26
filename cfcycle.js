@@ -529,15 +529,47 @@ function moveDraftNode(i, dir) {
   const d = cycleDraft; if (!d) return;
   const j = i + dir, n = d.nodes.length;
   if (i <= 0 || j <= 0 || i >= n || j >= n) return;
+  moveDraftNodeTo(i, j);
+}
+/* Déplace une étape de la position `from` vers `to` (glisser-déposer dans
+   l'arborescence) ; les liaisons de la zone traversée sont recalculées. */
+function moveDraftNodeTo(from, to) {
+  const d = cycleDraft; if (!d) return;
+  const n = d.nodes.length;
+  if (from === to || from < 0 || to < 0 || from >= n) return;
   const nodes = d.nodes.slice();
-  [nodes[i], nodes[j]] = [nodes[j], nodes[i]];
+  const [m] = nodes.splice(from, 1);
+  const at = Math.max(0, Math.min(to, nodes.length));
+  nodes.splice(at, 0, m);
   const cf = C(d.cfId);
   const startOk = cf && (cycleNodeCloses(nodes[0], cf.a) || cycleNodeCloses(nodes[0], cf.b));
   if (!startOk) return toast('La première étape doit être une surface de la CF de départ.');
   d.nodes = nodes;
-  reconnectDraftEdges(Math.max(0, Math.min(i, j) - 1), Math.min(n - 2, Math.max(i, j) + 1), () => {
+  reconnectDraftEdges(Math.max(0, Math.min(from, at) - 1), Math.min(n - 2, Math.max(from, at) + 1), () => {
     render(); renderProps(); updateTip();
   });
+}
+/* Clic sur une liaison pendant la création : ajoute automatiquement la
+   surface concernée (celle qui prolonge le parcours). */
+function pickCycleLink(l) {
+  if (!l) return;
+  if (!cycleDraft) return toast('Commencez par une surface de CF.');
+  const last = cycleDraft.nodes[cycleDraft.nodes.length - 1];
+  const lastSurfaces = nodeSurfaces(last).map(f => f.id);
+  let target = null;
+  if (lastSurfaces.includes(l.a)) target = l.b;
+  else if (lastSurfaces.includes(l.b)) target = l.a;
+  else {
+    const candidates = [l.a, l.b].filter(id => !cycleDraft.nodes.includes(id));
+    if (!candidates.length) return toast('Les deux surfaces de cette liaison sont déjà dans le cycle.');
+    if (candidates.length === 1) target = candidates[0];
+    else {
+      const lp = endPos(last) || { x: 0, y: 0 };
+      const dist = id => { const p = endPos(id); return p ? Math.hypot(p.x - lp.x, p.y - lp.y) : Infinity; };
+      target = candidates.sort((a, b) => dist(a) - dist(b))[0];
+    }
+  }
+  pickCycleNode(target);
 }
 /* Retire une étape du parcours (sauf la première) ; les voisins sont
    reconnectés automatiquement. */
@@ -601,13 +633,13 @@ function cyclesPanel() {
   const priority = cycleDisplayOrder().filter(c => c.visible !== false).reverse();
   return `<h3 style="color:#c65e00">Cycles</h3>
     <p class="muted">Une CF par cycle : partir d’une de ses surfaces et finir sur l’autre (ou sur le groupe de surfaces qui la contient).</p>
-    <ul class="help-list cycle-tips"><li><b>Clic ou Ctrl+clic</b> : ajouter une surface ou une référence ; le parcours en cours est tracé <b>en gras</b>.</li><li><b>✕</b> sur une étape, <b>Ctrl+clic sur la dernière étape</b> ou <b>Retour arrière</b> : la retirer ; <b>Échap</b> : annuler.</li><li>Les contacts d’une référence vers la pièce suivante sont tous inclus, même si une seule surface est cliquée.</li><li>Le cycle a sa propre couleur (choisie dès le début) pour les pointillés, surfaces, références et courbes internes. La CF garde son affichage noir / couleur.</li></ul>
+    <ul class="help-list cycle-tips"><li><b>Clic ou Ctrl+clic</b> : ajouter une surface ou une référence ; <b>cliquer sur une liaison</b> ajoute directement la surface concernée ; le parcours en cours est tracé <b>en gras</b>.</li><li><b>✕</b> sur une étape, <b>Ctrl+clic sur la dernière étape</b>, <b>Retour arrière</b> ou <b>Ctrl+Z</b> : la retirer ; <b>Échap</b> : annuler. Les étapes se réordonnent au <b>glisser-déposer</b> ou avec ↑ ↓, et s’insèrent n’importe où avec ＋.</li><li>Les contacts d’une référence vers la pièce suivante sont tous inclus, même si une seule surface est cliquée.</li><li>Le cycle a sa propre couleur (choisie dès le début) pour les pointillés, surfaces, références et courbes internes. La CF garde son affichage noir / couleur.</li><li><b>Glisser le fond</b> déplace la vue pendant la création.</li></ul>
     ${S().groups.some(g => g.kind === 'fonc' && g.collapsed) ? '<button data-ca="expand">Développer les groupes pour voir toutes les surfaces</button>' : ''}
     ${cycleDraft ? `<h4>${cycleDraft.editId ? 'Modification du parcours' : 'Parcours'} — ${esc(cfDisplayName(C(cycleDraft.cfId)))}</h4>
       <div class="row"><label>Couleur</label><input type="color" data-cycle-draft-color value="${cycleDraft.color || DEFAULT_CYCLE_COLOR}" aria-label="Couleur du cycle en cours"></div>
       <div class="cycle-tree">${cycleDraft.nodes.map((id, i) => {
         const n = cycleDraft.nodes.length;
-        return `<div class="ct-row${i === 0 ? ' ct-first' : ''}${cycleDraft.insertAt === i + 1 ? ' ct-insert' : ''}">
+        return `<div class="ct-row${i === 0 ? ' ct-first' : ''}${cycleDraft.insertAt === i + 1 ? ' ct-insert' : ''}" draggable="true" data-i="${i}" title="Glisser pour changer l’ordre">
           <span class="ct-idx">${i + 1}.</span>
           <span class="ct-name" title="${esc(cycleNodeName(id))}">${esc(cycleNodeName(id))}</span>
           <span class="ct-acts">

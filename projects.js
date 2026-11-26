@@ -169,36 +169,48 @@ function renderProjectBadge() {
 
 /* ===== Fenêtre « Projets » ===== */
 function projectsDialog() {
-  const rows = () => Projects.items.map((p, i) => {
-    const n = Projects.sheetCount(p.id);
-    const shared = p.kind === 'board';
-    return `<div class="proj ${p.id === Projects.current ? 'active' : ''}" draggable="true" data-proj="${p.id}" data-i="${i}">
-      <span class="drag" title="Glisser pour changer l'ordre">⠿</span>
-      <div class="pi">
-        <b>${esc(p.name)}${shared ? ' <span class="badge-live">partagé</span>' : ''}</b>
-        <small>${n} graphe${n > 1 ? 's' : ''} · ${pTime(p.updated)}</small>
-      </div>
-      <div class="pa">
-        <button data-open title="Ouvrir ce projet">Ouvrir</button>
-        <button data-share title="Partager en direct et copier le lien">Partager</button>
-        <button data-ren title="Renommer">✎</button>
-        <button data-dup title="Dupliquer">⧉</button>
-        <button data-exp title="Enregistrer en .json">⤓</button>
-        <button data-del class="danger" title="Supprimer">🗑</button>
-      </div>
-    </div>`;
-  }).join('') || '<p class="muted">Aucun projet. Créez-en un pour commencer.</p>';
+  let filter = '';
+  const rows = () => Projects.items
+    .map((p, i) => ({ p, i }))
+    .filter(({ p }) => !filter || p.name.toLowerCase().includes(filter))
+    .map(({ p, i }) => {
+      const n = Projects.sheetCount(p.id);
+      const shared = p.kind === 'board';
+      const active = p.id === Projects.current;
+      return `<div class="proj ${active ? 'active' : ''}" draggable="true" data-proj="${p.id}" data-i="${i}" tabindex="0" title="Cliquer pour ouvrir ce projet">
+        <span class="drag" title="Glisser pour changer l’ordre">⠿</span>
+        <div class="pi">
+          <b>${esc(p.name)}</b>
+          <small>${shared ? '<span class="badge-live">partagé</span> · ' : ''}${n} graphe${n > 1 ? 's' : ''} · ${pTime(p.updated)}</small>
+        </div>
+        <div class="pa">
+          ${active ? '<span class="proj-cur">✓ ouvert</span>' : '<button data-open class="primary" title="Ouvrir ce projet">Ouvrir</button>'}
+          <button data-share title="Partager en direct et copier le lien">↗</button>
+          <button data-ren title="Renommer">✎</button>
+          <button data-dup title="Dupliquer">⧉</button>
+          <button data-exp title="Enregistrer en .json">⤓</button>
+          <button data-del class="danger" title="Supprimer">🗑</button>
+        </div>
+      </div>`;
+    }).join('') || `<p class="muted proj-empty">Aucun projet${filter ? ' ne correspond à « ' + esc(filter) + ' »' : ''}.</p>`;
 
-  const body = el(`<div style="width:100%"><div id="projList">${rows()}</div>
-    <p class="muted">Glissez un projet par la poignée ⠿ pour le déplacer. « Partager » crée un lien permanent : toute personne qui l'ouvre voit le même graphe en direct.</p></div>`);
+  const body = el(`<div style="width:100%"><div class="proj-actions">
+      <button id="pNew" class="primary">＋ Nouveau projet</button>
+      <button id="pImp">⤒ Importer un .json</button>
+      <input id="projFilter" type="search" placeholder="Rechercher un projet…" aria-label="Rechercher un projet">
+    </div>
+    <div id="projList">${rows()}</div>
+    <p class="muted">Cliquer un projet pour l’ouvrir · la poignée ⠿ change l’ordre · ↗ crée un lien de partage en direct (toute personne qui l’ouvre voit le même graphe).</p></div>`);
   const draw = () => { $('#projList', body).innerHTML = rows(); renderProjectBadge(); };
   const list = $('#projList', body);
+  $('#projFilter', body).addEventListener('input', e => { filter = e.target.value.trim().toLowerCase(); draw(); });
+  $('#pNew', body).onclick = () => { closeModal(); Projects.createAndOpen('Nouveau projet'); toast('Nouveau projet créé'); };
+  $('#pImp', body).onclick = () => { closeModal(); $('#fileInput').dataset.intoNew = '1'; $('#fileInput').click(); };
 
   list.addEventListener('click', async e => {
     const row = e.target.closest('[data-proj]'); if (!row) return;
     const id = row.dataset.proj, p = Projects.get(id);
-    e.stopPropagation();
-    if (e.target.closest('[data-open]')) { if (id === Projects.current || Projects.switchTo(id)) { closeModal(); toast(`Projet « ${p.name} » ouvert`); } else draw(); return; }
+    if (e.target.closest('.drag')) return;
     if (e.target.closest('[data-share]')) { closeModal(); Collab.shareDialog(id); return; }
     if (e.target.closest('[data-ren]')) { askText('Renommer le projet', p.name, v => { if (v) { Projects.update(id, { name: v }); if (p.kind === 'board' && typeof Collab !== 'undefined') Collab.renameBoard(p, v); draw(); } }); return; }
     if (e.target.closest('[data-dup]')) {
@@ -225,6 +237,13 @@ function projectsDialog() {
       });
       return;
     }
+    /* Clic sur la ligne : ouvrir le projet. */
+    if (id === Projects.current || Projects.switchTo(id)) { closeModal(); toast(`Projet « ${p.name} » ouvert`); }
+    else draw();
+  });
+  list.addEventListener('keydown', e => {
+    const row = e.target.closest('[data-proj]'); if (!row) return;
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); row.click(); }
   });
 
   /* Réordonnancement par glisser-déposer */
@@ -249,9 +268,5 @@ function projectsDialog() {
     dragId = null; draw();
   });
 
-  const left = el(`<div class="row" style="gap:8px"><button id="pNew">＋ Nouveau projet</button><button id="pImp">⤒ Importer un .json</button></div>`);
-  $('#pNew', left).onclick = () => { closeModal(); Projects.createAndOpen('Nouveau projet'); toast('Nouveau projet créé'); };
-  $('#pImp', left).onclick = () => { closeModal(); $('#fileInput').dataset.intoNew = '1'; $('#fileInput').click(); };
-
-  openModal({ title: '🗂 Projets', body, extraLeft: left, wide: 720, noCancel: true });
+  openModal({ title: '🗂 Projets', body, wide: 720, noCancel: true });
 }
